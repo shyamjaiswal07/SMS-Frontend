@@ -1,0 +1,23 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --cv-bg: #0b1220; /* deep navy */
+  --cv-header: #0f172a; /* slate-900 */
+  --cv-sider: #0a2a4a; /* navy */
+  --cv-accent: #f97316; /* orange */
+  --cv-card: #0f172a;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  background: var(--cv-bg);
+  color: #e5e7eb;
+}
+
