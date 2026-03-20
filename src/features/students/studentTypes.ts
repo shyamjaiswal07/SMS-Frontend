@@ -1,4 +1,6 @@
 export type StudentStatus = "APPLICANT" | "ACTIVE" | "INACTIVE" | "GRADUATED" | "TRANSFERRED";
+export type AdmissionWorkflowState = "DRAFT" | "SUBMITTED" | "UNDER_REVIEW" | "APPROVED" | "REJECTED" | "WAITLISTED" | "CONVERTED";
+export type StudentIdResetCycle = "NEVER" | "YEARLY";
 
 export type StudentRow = {
   id: number;
@@ -18,6 +20,22 @@ export type Paginated<T> = {
   next?: string | null;
   previous?: string | null;
   results?: T[];
+};
+
+export type StudentIdPolicy = {
+  id: number;
+  school: number;
+  prefix: string;
+  separator: string;
+  include_year: boolean;
+  reset_cycle: StudentIdResetCycle;
+  sequence_padding: number;
+  sequence_start: number;
+  allow_manual_override: boolean;
+  is_active: boolean;
+  preview_next_student_id?: string;
+  created_at?: string;
+  updated_at?: string;
 };
 
 export type StudentDrawerTabKey =

@@ -4,9 +4,9 @@ import { lazy, Suspense, useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { AppstoreOutlined, AuditOutlined, BellOutlined, BookOutlined, DollarOutlined, TeamOutlined, UserOutlined } from "@ant-design/icons";
 
-const Students = lazy(() => import("@/pages/Students"));
+const Students = lazy(() => import("@/pages/StudentsSprint"));
 const Admissions = lazy(() => import("@/pages/Database"));
-const Academics = lazy(() => import("@/pages/Academics"));
+const Academics = lazy(() => import("@/pages/AcademicsSprint"));
 
 type ModuleKey = "students" | "academics" | "admissions" | "admin" | "modules" | "communications" | "finance" | "hr";
 

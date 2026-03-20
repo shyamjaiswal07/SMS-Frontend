@@ -9,6 +9,7 @@ import {
   DollarOutlined,
   TeamOutlined,
   LogoutOutlined,
+  UserOutlined,
 } from "@ant-design/icons";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useEffect, useMemo } from "react";
@@ -31,6 +32,7 @@ export default function AppLayout() {
 
   const selectedKey = useMemo(() => {
     if (location.pathname.startsWith("/modules")) return "modules";
+    if (location.pathname.startsWith("/students")) return "students";
     if (location.pathname.startsWith("/hr")) return "hr";
     if (location.pathname.startsWith("/finance")) return "finance";
     if (location.pathname.startsWith("/communications")) return "communications";
@@ -44,11 +46,11 @@ export default function AppLayout() {
   const allowedKeys = useMemo(() => {
     switch (role) {
       case "STUDENT":
-        return ["dashboard", "academics", "communications"] as const;
+        return ["dashboard", "students", "academics", "communications"] as const;
       case "PARENT":
-        return ["dashboard", "communications"] as const;
+        return ["dashboard", "students", "communications"] as const;
       case "TEACHER":
-        return ["dashboard", "academics", "database", "communications", "modules"] as const;
+        return ["dashboard", "students", "academics", "database", "communications", "modules"] as const;
       case "ACCOUNTANT":
         return ["dashboard", "finance", "communications", "modules"] as const;
       case "HR_MANAGER":
@@ -57,11 +59,11 @@ export default function AppLayout() {
       case "TRANSPORT_COORDINATOR":
         return ["dashboard", "communications", "modules"] as const;
       case "SCHOOL_ADMIN":
-        return ["dashboard", "database", "academics", "finance", "hr", "communications", "admin", "modules"] as const;
+        return ["dashboard", "students", "database", "academics", "finance", "hr", "communications", "admin", "modules"] as const;
       case "SUPER_ADMIN":
-        return ["dashboard", "finance", "hr", "communications", "admin", "modules"] as const;
+        return ["dashboard", "students", "finance", "hr", "communications", "admin", "modules"] as const;
       default:
-        return ["dashboard", "academics", "communications"] as const;
+        return ["dashboard", "students", "academics", "communications"] as const;
     }
   }, [role]);
 
@@ -92,6 +94,7 @@ export default function AppLayout() {
   const menuItems = useMemo(() => {
     const base: Array<{ key: string; icon: ReactNode; label: string }> = [
       { key: "dashboard", icon: <DashboardOutlined />, label: "Dashboard" },
+      { key: "students", icon: <UserOutlined />, label: "Students" },
       { key: "database", icon: <DatabaseOutlined />, label: "Admissions" },
       { key: "academics", icon: <BookOutlined />, label: "Academics" },
       { key: "finance", icon: <DollarOutlined />, label: "Finance" },

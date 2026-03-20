@@ -16,12 +16,19 @@ type LoginResponse = {
   tenant?: TenantContext;
 };
 
+type PasswordResetConfirmPayload = {
+  uid: string;
+  token: string;
+  new_password: string;
+};
+
 export const api = {
-  login: async (email: string, password: string, tenantCode?: string) => {
+  login: async (email: string, password: string, tenantCode?: string, twoFactorCode?: string) => {
     const response = await axios.post<LoginResponse>(`${apiEndpoint.BaseUrl}/api/auth/token/`, {
       email,
       password,
       tenant_code: tenantCode ?? "",
+      two_factor_code: twoFactorCode ?? "",
     });
     return response.data;
   },
@@ -49,16 +56,24 @@ export const api = {
     });
     return response.data;
   },
-  forgotpassword: async (email: string) => {
-    const response = await axios.post(`${apiEndpoint.BaseUrl}/forgot-password/`, {
-      email,
-    });
-    return response.data;
+  passwordReset: {
+    request: async (payload: { email: string; tenant_code?: string }) => {
+      const response = await axios.post(`${apiEndpoint.BaseUrl}/api/auth/password-reset/request/`, payload);
+      return response.data;
+    },
+    confirm: async (payload: PasswordResetConfirmPayload) => {
+      const response = await axios.post(`${apiEndpoint.BaseUrl}/api/auth/password-reset/confirm/`, payload);
+      return response.data;
+    },
   },
 
   students: {
     list: async (params?: { search?: string; page?: number; page_size?: number }) => {
       const response = await apiClient.get(`/api/students/students/`, { params });
+      return response.data;
+    },
+    create: async (payload: Record<string, unknown>) => {
+      const response = await apiClient.post(`/api/students/students/`, payload);
       return response.data;
     },
     transcript: async (studentPk: number) => {
@@ -81,6 +96,43 @@ export const api = {
       },
       updateStatus: async (applicationPk: number, status: string) => {
         const response = await apiClient.patch(`/api/students/admission-applications/${applicationPk}/`, { status });
+        return response.data;
+      },
+      submit: async (applicationPk: number) => {
+        const response = await apiClient.post(`/api/students/admission-applications/${applicationPk}/submit/`, {});
+        return response.data;
+      },
+      startReview: async (applicationPk: number, payload?: { notes?: string }) => {
+        const response = await apiClient.post(`/api/students/admission-applications/${applicationPk}/start-review/`, payload ?? {});
+        return response.data;
+      },
+      approve: async (applicationPk: number, payload?: { notes?: string }) => {
+        const response = await apiClient.post(`/api/students/admission-applications/${applicationPk}/approve/`, payload ?? {});
+        return response.data;
+      },
+      reject: async (applicationPk: number, payload: { reason: string }) => {
+        const response = await apiClient.post(`/api/students/admission-applications/${applicationPk}/reject/`, payload);
+        return response.data;
+      },
+      convert: async (
+        applicationPk: number,
+        payload?: { admission_number?: string; student_id?: string; metadata_json?: Record<string, unknown> },
+      ) => {
+        const response = await apiClient.post(`/api/students/admission-applications/${applicationPk}/convert/`, payload ?? {});
+        return response.data;
+      },
+      workflowHistory: async (applicationPk: number) => {
+        const response = await apiClient.get(`/api/students/admission-applications/${applicationPk}/workflow-history/`);
+        return response.data;
+      },
+    },
+    studentIdPolicies: {
+      current: async () => {
+        const response = await apiClient.get(`/api/students/student-id-policies/current/`);
+        return response.data;
+      },
+      updateCurrent: async (payload: Record<string, unknown>) => {
+        const response = await apiClient.patch(`/api/students/student-id-policies/current/`, payload);
         return response.data;
       },
     },
@@ -124,6 +176,24 @@ export const api = {
   },
 
   accounts: {
+    twoFactor: {
+      status: async () => {
+        const response = await apiClient.get(`/api/accounts/two-factor/`);
+        return response.data;
+      },
+      enroll: async (payload?: { method?: string }) => {
+        const response = await apiClient.post(`/api/accounts/two-factor/`, payload ?? {});
+        return response.data;
+      },
+      verify: async (verification_code: string) => {
+        const response = await apiClient.post(`/api/accounts/two-factor/verify/`, { verification_code });
+        return response.data;
+      },
+      disable: async () => {
+        const response = await apiClient.delete(`/api/accounts/two-factor/`);
+        return response.data;
+      },
+    },
     users: {
       list: async (params?: { search?: string; page?: number; page_size?: number }) => {
         const response = await apiClient.get(`/api/accounts/users/`, { params });
@@ -180,6 +250,12 @@ export const api = {
         return response.data;
       },
     },
+    passwordResetAudits: {
+      list: async (params?: { search?: string; page?: number; page_size?: number }) => {
+        const response = await apiClient.get(`/api/accounts/password-reset-audits/`, { params });
+        return response.data;
+      },
+    },
     rolePermissions: {
       list: async (params?: { search?: string; page?: number; page_size?: number }) => {
         const response = await apiClient.get(`/api/accounts/role-permissions/`, { params });
@@ -205,9 +281,16 @@ export const api = {
         const response = await apiClient.get(`/api/institutions/schools/`, { params });
         return response.data;
       },
+      get: async (id: number) => {
+        const response = await apiClient.get(`/api/institutions/schools/${id}/`);
+        return response.data;
+      },
+      update: async (id: number, payload: Record<string, unknown>) => {
+        const response = await apiClient.patch(`/api/institutions/schools/${id}/`, payload);
+        return response.data;
+      },
     },
   },
-
 };
 
 
