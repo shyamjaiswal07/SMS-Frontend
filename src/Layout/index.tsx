@@ -1,5 +1,15 @@
 import { Layout, Menu } from "antd";
-import { BookOutlined, DatabaseOutlined, DashboardOutlined, LogoutOutlined } from "@ant-design/icons";
+import {
+  AuditOutlined,
+  AppstoreOutlined,
+  BellOutlined,
+  BookOutlined,
+  DatabaseOutlined,
+  DashboardOutlined,
+  DollarOutlined,
+  TeamOutlined,
+  LogoutOutlined,
+} from "@ant-design/icons";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useEffect, useMemo } from "react";
 import type { ReactNode } from "react";
@@ -20,6 +30,11 @@ export default function AppLayout() {
   }, []);
 
   const selectedKey = useMemo(() => {
+    if (location.pathname.startsWith("/modules")) return "modules";
+    if (location.pathname.startsWith("/hr")) return "hr";
+    if (location.pathname.startsWith("/finance")) return "finance";
+    if (location.pathname.startsWith("/communications")) return "communications";
+    if (location.pathname.startsWith("/admin")) return "admin";
     if (location.pathname.startsWith("/database")) return "database";
     if (location.pathname.startsWith("/academics")) return "academics";
     if (location.pathname.startsWith("/dashboard")) return "dashboard";
@@ -29,24 +44,40 @@ export default function AppLayout() {
   const allowedKeys = useMemo(() => {
     switch (role) {
       case "STUDENT":
-        return ["dashboard", "academics"] as const;
+        return ["dashboard", "academics", "communications"] as const;
+      case "PARENT":
+        return ["dashboard", "communications"] as const;
       case "TEACHER":
-        return ["dashboard", "academics", "database"] as const;
+        return ["dashboard", "academics", "database", "communications", "modules"] as const;
+      case "ACCOUNTANT":
+        return ["dashboard", "finance", "communications", "modules"] as const;
+      case "HR_MANAGER":
+        return ["dashboard", "hr", "communications", "modules"] as const;
+      case "LIBRARIAN":
+      case "TRANSPORT_COORDINATOR":
+        return ["dashboard", "communications", "modules"] as const;
       case "SCHOOL_ADMIN":
-        return ["dashboard", "database", "academics"] as const;
+        return ["dashboard", "database", "academics", "finance", "hr", "communications", "admin", "modules"] as const;
+      case "SUPER_ADMIN":
+        return ["dashboard", "finance", "hr", "communications", "admin", "modules"] as const;
       default:
-        return ["dashboard", "academics"] as const;
+        return ["dashboard", "academics", "communications"] as const;
     }
   }, [role]);
 
   const defaultAllowedPath = useMemo(() => {
     switch (role) {
-      case "STUDENT":
-        return "/dashboard?module=students";
       case "TEACHER":
         return "/academics";
-      case "SCHOOL_ADMIN":
-        return "/dashboard?module=students";
+      case "ACCOUNTANT":
+        return "/finance";
+      case "HR_MANAGER":
+        return "/hr";
+      case "LIBRARIAN":
+      case "TRANSPORT_COORDINATOR":
+        return "/modules";
+      case "SUPER_ADMIN":
+        return "/admin";
       default:
         return "/dashboard?module=students";
     }
@@ -60,22 +91,23 @@ export default function AppLayout() {
 
   const menuItems = useMemo(() => {
     const base: Array<{ key: string; icon: ReactNode; label: string }> = [
-      { key: "dashboard", icon: <DashboardOutlined />, label: "Students" },
+      { key: "dashboard", icon: <DashboardOutlined />, label: "Dashboard" },
       { key: "database", icon: <DatabaseOutlined />, label: "Admissions" },
       { key: "academics", icon: <BookOutlined />, label: "Academics" },
+      { key: "finance", icon: <DollarOutlined />, label: "Finance" },
+      { key: "hr", icon: <TeamOutlined />, label: "HR" },
+      { key: "communications", icon: <BellOutlined />, label: "Communications" },
+      { key: "modules", icon: <AppstoreOutlined />, label: "ERP Modules" },
+      { key: "admin", icon: <AuditOutlined />, label: "Admin" },
     ];
 
-    return base
-      .filter((i) => allowedKeys.includes(i.key as any))
-      .concat([{ key: "logout", icon: <LogoutOutlined />, label: "Logout" }]);
+    return base.filter((i) => allowedKeys.includes(i.key as any)).concat([{ key: "logout", icon: <LogoutOutlined />, label: "Logout" }]);
   }, [allowedKeys]);
 
   return (
     <Layout className="min-h-screen">
       <Sider breakpoint="lg" collapsedWidth={64} className="!bg-[var(--cv-sider)]">
-        <div className="h-12 flex items-center px-4 text-white font-semibold tracking-wide">
-          Cognivoult
-        </div>
+        <div className="h-12 flex items-center px-4 text-white font-semibold tracking-wide">Cognivoult</div>
         <Menu
           theme="dark"
           mode="inline"
@@ -108,4 +140,3 @@ export default function AppLayout() {
     </Layout>
   );
 }
-

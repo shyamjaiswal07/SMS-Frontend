@@ -41,6 +41,14 @@ export const api = {
     });
     return response.data;
   },
+  lotDetails: async (formData: FormData) => {
+    const response = await apiClient.post(`/api/upload/`, formData, {
+      headers: {
+        "Content-Type": "multipart/form-data",
+      },
+    });
+    return response.data;
+  },
   forgotpassword: async (email: string) => {
     const response = await axios.post(`${apiEndpoint.BaseUrl}/forgot-password/`, {
       email,
@@ -115,5 +123,92 @@ export const api = {
     },
   },
 
+  accounts: {
+    users: {
+      list: async (params?: { search?: string; page?: number; page_size?: number }) => {
+        const response = await apiClient.get(`/api/accounts/users/`, { params });
+        return response.data;
+      },
+      create: async (payload: Record<string, unknown>) => {
+        const response = await apiClient.post(`/api/accounts/users/`, payload);
+        return response.data;
+      },
+      update: async (id: number, payload: Record<string, unknown>) => {
+        const response = await apiClient.patch(`/api/accounts/users/${id}/`, payload);
+        return response.data;
+      },
+      remove: async (id: number) => {
+        const response = await apiClient.delete(`/api/accounts/users/${id}/`);
+        return response.data;
+      },
+      bulkImport: async (file: File) => {
+        const formData = new FormData();
+        formData.append("file", file);
+        const response = await apiClient.post(`/api/accounts/users/bulk-import/`, formData, {
+          headers: {
+            "Content-Type": "multipart/form-data",
+          },
+        });
+        return response.data;
+      },
+    },
+    memberships: {
+      list: async (params?: { search?: string; page?: number; page_size?: number }) => {
+        const response = await apiClient.get(`/api/accounts/memberships/`, { params });
+        return response.data;
+      },
+      create: async (payload: Record<string, unknown>) => {
+        const response = await apiClient.post(`/api/accounts/memberships/`, payload);
+        return response.data;
+      },
+      update: async (id: number, payload: Record<string, unknown>) => {
+        const response = await apiClient.patch(`/api/accounts/memberships/${id}/`, payload);
+        return response.data;
+      },
+      remove: async (id: number) => {
+        const response = await apiClient.delete(`/api/accounts/memberships/${id}/`);
+        return response.data;
+      },
+      myTenants: async () => {
+        const response = await apiClient.get(`/api/accounts/users/my-tenants/`);
+        return response.data;
+      },
+    },
+    loginAudits: {
+      list: async (params?: { search?: string; page?: number; page_size?: number }) => {
+        const response = await apiClient.get(`/api/accounts/login-audits/`, { params });
+        return response.data;
+      },
+    },
+    rolePermissions: {
+      list: async (params?: { search?: string; page?: number; page_size?: number }) => {
+        const response = await apiClient.get(`/api/accounts/role-permissions/`, { params });
+        return response.data;
+      },
+      create: async (payload: Record<string, unknown>) => {
+        const response = await apiClient.post(`/api/accounts/role-permissions/`, payload);
+        return response.data;
+      },
+      update: async (id: number, payload: Record<string, unknown>) => {
+        const response = await apiClient.patch(`/api/accounts/role-permissions/${id}/`, payload);
+        return response.data;
+      },
+      remove: async (id: number) => {
+        const response = await apiClient.delete(`/api/accounts/role-permissions/${id}/`);
+        return response.data;
+      },
+    },
+  },
+  institutions: {
+    schools: {
+      list: async (params?: { search?: string; page?: number; page_size?: number }) => {
+        const response = await apiClient.get(`/api/institutions/schools/`, { params });
+        return response.data;
+      },
+    },
+  },
+
 };
+
+
 
