@@ -17,7 +17,13 @@ body,
 }
 
 body {
+  margin: 0;
   background: var(--cv-bg);
   color: #e5e7eb;
+  overflow-x: hidden;
+}
+
+#root {
+  min-height: 100%;
 }
 

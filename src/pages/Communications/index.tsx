@@ -1,5 +1,5 @@
-import { BellOutlined, MessageOutlined, NotificationOutlined, PushpinOutlined, SendOutlined } from "@ant-design/icons";
-import { Button, Card, Col, Empty, Form, Input, Modal, Row, Select, Space, Statistic, Switch, Table, Tabs, Tag, Typography, message } from "antd";
+import { BellOutlined, MessageOutlined, NotificationOutlined, PlusOutlined, PushpinOutlined, ReloadOutlined, SendOutlined, UserAddOutlined } from "@ant-design/icons";
+import { Button, Card, Col, Empty, Form, Input, Modal, Row, Select, Space, Statistic, Switch, Table, Tabs, Tag, Tooltip, Typography, message } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useEffect, useMemo, useState } from "react";
 import apiClient from "@/services/apiClient";
@@ -275,8 +275,19 @@ export default function CommunicationsPage() {
         </div>
         <Space wrap>
           <Tag color="blue">{role ?? "UNKNOWN"}</Tag>
-          <Button onClick={() => void loadAll()} loading={loading}>Refresh</Button>
-          {canThread ? <Button type="primary" className="!rounded-2xl !bg-[var(--cv-accent)] !border-0" onClick={() => { threadForm.resetFields(); threadForm.setFieldsValue({ is_group: false }); setThreadOpen(true); }}>New Thread</Button> : null}
+          <Button className="!rounded-2xl" icon={<ReloadOutlined />} onClick={() => void loadAll()} loading={loading}>
+            Refresh
+          </Button>
+          {canThread ? (
+            <Button
+              type="primary"
+              className="!rounded-2xl !bg-[var(--cv-accent)] !border-0"
+              icon={<MessageOutlined />}
+              onClick={() => { threadForm.resetFields(); threadForm.setFieldsValue({ is_group: false }); setThreadOpen(true); }}
+            >
+              New Thread
+            </Button>
+          ) : null}
         </Space>
       </div>
 
@@ -324,7 +335,16 @@ export default function CommunicationsPage() {
                             <div className="text-white text-lg font-semibold">{selectedThread.subject || `Thread #${selectedThread.id}`}</div>
                             <div className="text-white/50 text-sm">Created {dt(selectedThread.created_at)}</div>
                           </div>
-                          {canThread ? <Button onClick={() => { participantForm.resetFields(); setParticipantOpen(true); }}>Add Participant</Button> : null}
+                          {canThread ? (
+                            <Tooltip title="Add participant">
+                              <Button
+                                shape="circle"
+                                icon={<UserAddOutlined />}
+                                aria-label="Add participant"
+                                onClick={() => { participantForm.resetFields(); setParticipantOpen(true); }}
+                              />
+                            </Tooltip>
+                          ) : null}
                         </div>
                         <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
                           <div className="text-white/75 text-sm mb-2">Participants</div>
@@ -365,7 +385,18 @@ export default function CommunicationsPage() {
             label: "Announcements",
             children: (
               <div className="space-y-4">
-                <div className="flex justify-end">{canAnnounce ? <Button type="primary" className="!rounded-2xl !bg-[var(--cv-accent)] !border-0" onClick={() => { announcementForm.resetFields(); announcementForm.setFieldsValue({ is_pinned: false, target_roles: [] }); setAnnouncementOpen(true); }}>New Announcement</Button> : null}</div>
+                <div className="flex justify-end">
+                  {canAnnounce ? (
+                    <Button
+                      type="primary"
+                      className="!rounded-2xl !bg-[var(--cv-accent)] !border-0"
+                      icon={<PushpinOutlined />}
+                      onClick={() => { announcementForm.resetFields(); announcementForm.setFieldsValue({ is_pinned: false, target_roles: [] }); setAnnouncementOpen(true); }}
+                    >
+                      New Announcement
+                    </Button>
+                  ) : null}
+                </div>
                 <Row gutter={[16, 16]}>
                   {announcements.length ? announcements.map((item) => (
                     <Col xs={24} lg={12} key={item.id}>
@@ -402,7 +433,16 @@ export default function CommunicationsPage() {
                 <Card className="!bg-[var(--cv-card)] !border-white/10 !rounded-3xl">
                   <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
                     <div><div className="text-white font-medium">Notification Queue</div><div className="text-white/55 text-sm">Unread metrics and delivery status from the backend.</div></div>
-                    {canNotify ? <Button type="primary" className="!rounded-2xl !bg-[var(--cv-accent)] !border-0" onClick={() => { notificationForm.resetFields(); notificationForm.setFieldsValue({ channel: "IN_APP", status: "PENDING", payload: "{}" }); setNotificationOpen(true); }}>New Notification</Button> : null}
+                    {canNotify ? (
+                      <Button
+                        type="primary"
+                        className="!rounded-2xl !bg-[var(--cv-accent)] !border-0"
+                        icon={<PlusOutlined />}
+                        onClick={() => { notificationForm.resetFields(); notificationForm.setFieldsValue({ channel: "IN_APP", status: "PENDING", payload: "{}" }); setNotificationOpen(true); }}
+                      >
+                        New Notification
+                      </Button>
+                    ) : null}
                   </div>
                   <Table rowKey="id" loading={loading} dataSource={notifications} columns={notificationColumns} pagination={{ pageSize: 8 }} />
                 </Card>

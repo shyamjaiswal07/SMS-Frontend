@@ -1,6 +1,7 @@
-import { CalendarOutlined, ProfileOutlined, SafetyCertificateOutlined, TeamOutlined } from "@ant-design/icons";
-import { Button, Card, Col, Descriptions, Drawer, Form, Input, InputNumber, Modal, Popconfirm, Row, Select, Space, Statistic, Switch, Table, Tabs, Tag, Typography, message } from "antd";
+import { CalendarOutlined, CheckOutlined, CloseOutlined, DeleteOutlined, EditOutlined, EyeOutlined, PlusOutlined, ProfileOutlined, ReloadOutlined, SafetyCertificateOutlined, TeamOutlined } from "@ant-design/icons";
+import { Button, Card, Col, Descriptions, Drawer, Form, Input, InputNumber, Modal, Popconfirm, Row, Select, Space, Statistic, Switch, Table, Tabs, Tag, Tooltip, Typography, message } from "antd";
 import type { ColumnsType } from "antd/es/table";
+import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
 import apiClient from "@/services/apiClient";
 
@@ -41,6 +42,54 @@ function getRole(): Role | undefined {
   } catch {
     return undefined;
   }
+}
+
+type IconActionButtonProps = {
+  label: string;
+  icon: ReactNode;
+  onClick?: () => void;
+  danger?: boolean;
+  className?: string;
+};
+
+function IconActionButton({ label, icon, onClick, danger = false, className }: IconActionButtonProps) {
+  return (
+    <Tooltip title={label}>
+      <Button
+        size="small"
+        type="text"
+        shape="circle"
+        icon={icon}
+        onClick={onClick}
+        danger={danger}
+        aria-label={label}
+        className={className ?? (danger ? undefined : "!text-white/70 hover:!text-[var(--cv-accent)]")}
+      />
+    </Tooltip>
+  );
+}
+
+type ConfirmIconActionButtonProps = IconActionButtonProps & {
+  confirmTitle: string;
+  onConfirm: () => void;
+};
+
+function ConfirmIconActionButton({ label, icon, confirmTitle, onConfirm, danger = false, className }: ConfirmIconActionButtonProps) {
+  return (
+    <Popconfirm title={confirmTitle} onConfirm={onConfirm} okText="Yes" cancelText="No">
+      <Tooltip title={label}>
+        <Button
+          size="small"
+          type="text"
+          shape="circle"
+          icon={icon}
+          danger={danger}
+          aria-label={label}
+          className={className ?? (danger ? undefined : "!text-white/70 hover:!text-[var(--cv-accent)]")}
+        />
+      </Tooltip>
+    </Popconfirm>
+  );
 }
 
 export default function HRPage() {
@@ -221,9 +270,9 @@ export default function HRPage() {
       title: "Actions",
       key: "actions",
       render: (_, row) => (
-        <Space wrap>
-          <Button size="small" onClick={() => { setSelectedStaffId(row.id); setStaffDetailOpen(true); }}>View</Button>
-          {canWrite ? <Button size="small" onClick={() => {
+        <Space size={4} wrap>
+          <IconActionButton label="View staff profile" icon={<EyeOutlined />} onClick={() => { setSelectedStaffId(row.id); setStaffDetailOpen(true); }} />
+          {canWrite ? <IconActionButton label="Edit staff profile" icon={<EditOutlined />} onClick={() => {
             setEditingStaffId(row.id);
             staffForm.setFieldsValue({
               user: row.user ?? undefined,
@@ -236,8 +285,8 @@ export default function HRPage() {
               date_of_joining: row.date_of_joining ?? "",
             });
             setStaffOpen(true);
-          }}>Edit</Button> : null}
-          {canWrite ? <Popconfirm title="Delete this staff profile?" onConfirm={() => void removeRecord("/api/hr/staff-profiles/", row.id, "Staff profile deleted", "Failed to delete staff profile")}><Button size="small" danger>Delete</Button></Popconfirm> : null}
+          }} /> : null}
+          {canWrite ? <ConfirmIconActionButton label="Delete staff profile" confirmTitle="Delete this staff profile?" icon={<DeleteOutlined />} danger onConfirm={() => void removeRecord("/api/hr/staff-profiles/", row.id, "Staff profile deleted", "Failed to delete staff profile")} /> : null}
         </Space>
       ),
     },
@@ -251,13 +300,13 @@ export default function HRPage() {
       title: "Actions",
       key: "actions",
       render: (_, row) => canWrite ? (
-        <Space wrap>
-          <Button size="small" onClick={() => {
+        <Space size={4} wrap>
+          <IconActionButton label="Edit leave type" icon={<EditOutlined />} onClick={() => {
             setEditingLeaveTypeId(row.id);
             leaveTypeForm.setFieldsValue({ name: row.name, code: row.code, max_days_per_year: row.max_days_per_year ?? 12, is_paid: row.is_paid ?? true });
             setLeaveTypeOpen(true);
-          }}>Edit</Button>
-          <Popconfirm title="Delete this leave type?" onConfirm={() => void removeRecord("/api/hr/leave-types/", row.id, "Leave type deleted", "Failed to delete leave type")}><Button size="small" danger>Delete</Button></Popconfirm>
+          }} />
+          <ConfirmIconActionButton label="Delete leave type" confirmTitle="Delete this leave type?" icon={<DeleteOutlined />} danger onConfirm={() => void removeRecord("/api/hr/leave-types/", row.id, "Leave type deleted", "Failed to delete leave type")} />
         </Space>
       ) : null,
     },
@@ -271,10 +320,10 @@ export default function HRPage() {
       title: "Actions",
       key: "actions",
       render: (_, row) => canWrite ? (
-        <Space wrap>
-          {row.status !== "APPROVED" ? <Button size="small" onClick={() => void updateStatus("/api/hr/leave-requests/", row.id, "APPROVED", "Leave request approved", "Failed to approve leave request")}>Approve</Button> : null}
-          {row.status !== "REJECTED" ? <Button size="small" danger onClick={() => void updateStatus("/api/hr/leave-requests/", row.id, "REJECTED", "Leave request rejected", "Failed to reject leave request")}>Reject</Button> : null}
-          <Button size="small" onClick={() => {
+        <Space size={4} wrap>
+          {row.status !== "APPROVED" ? <IconActionButton label="Approve leave request" icon={<CheckOutlined />} className="!text-emerald-400 hover:!text-emerald-300" onClick={() => void updateStatus("/api/hr/leave-requests/", row.id, "APPROVED", "Leave request approved", "Failed to approve leave request")} /> : null}
+          {row.status !== "REJECTED" ? <IconActionButton label="Reject leave request" icon={<CloseOutlined />} danger onClick={() => void updateStatus("/api/hr/leave-requests/", row.id, "REJECTED", "Leave request rejected", "Failed to reject leave request")} /> : null}
+          <IconActionButton label="Edit leave request" icon={<EditOutlined />} onClick={() => {
             setEditingLeaveRequestId(row.id);
             leaveForm.setFieldsValue({
               staff: row.staff,
@@ -284,8 +333,8 @@ export default function HRPage() {
               status: row.status ?? "PENDING",
             });
             setLeaveOpen(true);
-          }}>Edit</Button>
-          <Popconfirm title="Delete this leave request?" onConfirm={() => void removeRecord("/api/hr/leave-requests/", row.id, "Leave request deleted", "Failed to delete leave request")}><Button size="small" danger>Delete</Button></Popconfirm>
+          }} />
+          <ConfirmIconActionButton label="Delete leave request" confirmTitle="Delete this leave request?" icon={<DeleteOutlined />} danger onConfirm={() => void removeRecord("/api/hr/leave-requests/", row.id, "Leave request deleted", "Failed to delete leave request")} />
         </Space>
       ) : null,
     },
@@ -299,8 +348,8 @@ export default function HRPage() {
       title: "Actions",
       key: "actions",
       render: (_, row) => canWrite ? (
-        <Space wrap>
-          <Button size="small" onClick={() => {
+        <Space size={4} wrap>
+          <IconActionButton label="Edit employment history" icon={<EditOutlined />} onClick={() => {
             setEditingHistoryId(row.id);
             historyForm.setFieldsValue({
               staff: row.staff,
@@ -311,8 +360,8 @@ export default function HRPage() {
               remarks: row.remarks ?? "",
             });
             setHistoryOpen(true);
-          }}>Edit</Button>
-          <Popconfirm title="Delete this employment history?" onConfirm={() => void removeRecord("/api/hr/employment-histories/", row.id, "Employment history deleted", "Failed to delete employment history")}><Button size="small" danger>Delete</Button></Popconfirm>
+          }} />
+          <ConfirmIconActionButton label="Delete employment history" confirmTitle="Delete this employment history?" icon={<DeleteOutlined />} danger onConfirm={() => void removeRecord("/api/hr/employment-histories/", row.id, "Employment history deleted", "Failed to delete employment history")} />
         </Space>
       ) : null,
     },
@@ -326,8 +375,8 @@ export default function HRPage() {
       title: "Actions",
       key: "actions",
       render: (_, row) => canWrite ? (
-        <Space wrap>
-          <Button size="small" onClick={() => {
+        <Space size={4} wrap>
+          <IconActionButton label="Edit qualification" icon={<EditOutlined />} onClick={() => {
             setEditingQualificationId(row.id);
             qualificationForm.setFieldsValue({
               staff: row.staff,
@@ -337,8 +386,8 @@ export default function HRPage() {
               grade_or_score: row.grade_or_score ?? "",
             });
             setQualificationOpen(true);
-          }}>Edit</Button>
-          <Popconfirm title="Delete this qualification?" onConfirm={() => void removeRecord("/api/hr/qualifications/", row.id, "Qualification deleted", "Failed to delete qualification")}><Button size="small" danger>Delete</Button></Popconfirm>
+          }} />
+          <ConfirmIconActionButton label="Delete qualification" confirmTitle="Delete this qualification?" icon={<DeleteOutlined />} danger onConfirm={() => void removeRecord("/api/hr/qualifications/", row.id, "Qualification deleted", "Failed to delete qualification")} />
         </Space>
       ) : null,
     },
@@ -352,8 +401,8 @@ export default function HRPage() {
       title: "Actions",
       key: "actions",
       render: (_, row) => canWrite ? (
-        <Space wrap>
-          <Button size="small" onClick={() => {
+        <Space size={4} wrap>
+          <IconActionButton label="Edit document" icon={<EditOutlined />} onClick={() => {
             setEditingDocumentId(row.id);
             documentForm.setFieldsValue({
               staff: row.staff,
@@ -362,8 +411,8 @@ export default function HRPage() {
               valid_until: row.valid_until ?? "",
             });
             setDocumentOpen(true);
-          }}>Edit</Button>
-          <Popconfirm title="Delete this document?" onConfirm={() => void removeRecord("/api/hr/staff-documents/", row.id, "Document deleted", "Failed to delete document")}><Button size="small" danger>Delete</Button></Popconfirm>
+          }} />
+          <ConfirmIconActionButton label="Delete document" confirmTitle="Delete this document?" icon={<DeleteOutlined />} danger onConfirm={() => void removeRecord("/api/hr/staff-documents/", row.id, "Document deleted", "Failed to delete document")} />
         </Space>
       ) : null,
     },
@@ -376,13 +425,13 @@ export default function HRPage() {
       title: "Actions",
       key: "actions",
       render: (_, row) => canWrite ? (
-        <Space wrap>
-          <Button size="small" onClick={() => {
+        <Space size={4} wrap>
+          <IconActionButton label="Edit payroll structure" icon={<EditOutlined />} onClick={() => {
             setEditingStructureId(row.id);
             structureForm.setFieldsValue({ name: row.name, code: row.code, pay_frequency: row.pay_frequency ?? "MONTHLY", currency: row.currency ?? "INR" });
             setStructureOpen(true);
-          }}>Edit</Button>
-          <Popconfirm title="Delete this payroll structure?" onConfirm={() => void removeRecord("/api/hr/payroll-structures/", row.id, "Payroll structure deleted", "Failed to delete payroll structure")}><Button size="small" danger>Delete</Button></Popconfirm>
+          }} />
+          <ConfirmIconActionButton label="Delete payroll structure" confirmTitle="Delete this payroll structure?" icon={<DeleteOutlined />} danger onConfirm={() => void removeRecord("/api/hr/payroll-structures/", row.id, "Payroll structure deleted", "Failed to delete payroll structure")} />
         </Space>
       ) : null,
     },
@@ -397,8 +446,8 @@ export default function HRPage() {
       title: "Actions",
       key: "actions",
       render: (_, row) => canWrite ? (
-        <Space wrap>
-          <Button size="small" onClick={() => {
+        <Space size={4} wrap>
+          <IconActionButton label="Edit payroll component" icon={<EditOutlined />} onClick={() => {
             setEditingComponentId(row.id);
             componentForm.setFieldsValue({
               payroll_structure: row.payroll_structure,
@@ -409,8 +458,8 @@ export default function HRPage() {
               order: row.order ?? 1,
             });
             setComponentOpen(true);
-          }}>Edit</Button>
-          <Popconfirm title="Delete this payroll component?" onConfirm={() => void removeRecord("/api/hr/payroll-components/", row.id, "Payroll component deleted", "Failed to delete payroll component")}><Button size="small" danger>Delete</Button></Popconfirm>
+          }} />
+          <ConfirmIconActionButton label="Delete payroll component" confirmTitle="Delete this payroll component?" icon={<DeleteOutlined />} danger onConfirm={() => void removeRecord("/api/hr/payroll-components/", row.id, "Payroll component deleted", "Failed to delete payroll component")} />
         </Space>
       ) : null,
     },
@@ -424,8 +473,8 @@ export default function HRPage() {
       title: "Actions",
       key: "actions",
       render: (_, row) => canWrite ? (
-        <Space wrap>
-          <Button size="small" onClick={() => {
+        <Space size={4} wrap>
+          <IconActionButton label="Edit payroll assignment" icon={<EditOutlined />} onClick={() => {
             setEditingAssignmentId(row.id);
             assignmentForm.setFieldsValue({
               staff: row.staff,
@@ -434,8 +483,8 @@ export default function HRPage() {
               effective_to: row.effective_to ?? "",
             });
             setAssignmentOpen(true);
-          }}>Edit</Button>
-          <Popconfirm title="Delete this payroll assignment?" onConfirm={() => void removeRecord("/api/hr/staff-payroll-assignments/", row.id, "Payroll assignment deleted", "Failed to delete payroll assignment")}><Button size="small" danger>Delete</Button></Popconfirm>
+          }} />
+          <ConfirmIconActionButton label="Delete payroll assignment" confirmTitle="Delete this payroll assignment?" icon={<DeleteOutlined />} danger onConfirm={() => void removeRecord("/api/hr/staff-payroll-assignments/", row.id, "Payroll assignment deleted", "Failed to delete payroll assignment")} />
         </Space>
       ) : null,
     },
@@ -448,13 +497,13 @@ export default function HRPage() {
       title: "Actions",
       key: "actions",
       render: (_, row) => canWrite ? (
-        <Space wrap>
-          <Button size="small" onClick={() => {
+        <Space size={4} wrap>
+          <IconActionButton label="Edit payroll run" icon={<EditOutlined />} onClick={() => {
             setEditingRunId(row.id);
             runForm.setFieldsValue({ run_year: row.run_year, run_month: row.run_month, status: row.status ?? "DRAFT" });
             setRunOpen(true);
-          }}>Edit</Button>
-          <Popconfirm title="Delete this payroll run?" onConfirm={() => void removeRecord("/api/hr/payroll-runs/", row.id, "Payroll run deleted", "Failed to delete payroll run")}><Button size="small" danger>Delete</Button></Popconfirm>
+          }} />
+          <ConfirmIconActionButton label="Delete payroll run" confirmTitle="Delete this payroll run?" icon={<DeleteOutlined />} danger onConfirm={() => void removeRecord("/api/hr/payroll-runs/", row.id, "Payroll run deleted", "Failed to delete payroll run")} />
         </Space>
       ) : null,
     },
@@ -480,7 +529,9 @@ export default function HRPage() {
         </div>
         <Space wrap>
           <Tag color="purple">{role ?? "UNKNOWN"}</Tag>
-          <Button onClick={() => void loadAll()} loading={loading}>Refresh</Button>
+          <Button className="!rounded-2xl" icon={<ReloadOutlined />} onClick={() => void loadAll()} loading={loading}>
+            Refresh
+          </Button>
         </Space>
       </div>
 
@@ -502,7 +553,7 @@ export default function HRPage() {
                 <Card className="!bg-[var(--cv-card)] !border-white/10 !rounded-3xl">
                   <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
                     <div><div className="text-white font-medium">Staff Profiles</div><div className="text-white/55 text-sm">Employee records, departments, and employment status.</div></div>
-                    {canWrite ? <Button type="primary" className="!rounded-2xl !bg-[var(--cv-accent)] !border-0" onClick={() => { staffForm.resetFields(); staffForm.setFieldsValue({ employment_status: "ACTIVE" }); setStaffOpen(true); }}>Add Staff</Button> : null}
+                    {canWrite ? <Button type="primary" className="!rounded-2xl !bg-[var(--cv-accent)] !border-0" icon={<PlusOutlined />} onClick={() => { staffForm.resetFields(); staffForm.setFieldsValue({ employment_status: "ACTIVE" }); setStaffOpen(true); }}>Add Staff</Button> : null}
                   </div>
                   <Table rowKey="id" loading={loading} dataSource={staff} columns={staffColumns} pagination={{ pageSize: 8 }} />
                 </Card>
@@ -511,7 +562,7 @@ export default function HRPage() {
                     <Card className="!bg-[var(--cv-card)] !border-white/10 !rounded-3xl h-full">
                       <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
                         <div><div className="text-white font-medium">Employment History</div><div className="text-white/55 text-sm">Track role changes and prior positions.</div></div>
-                        {canWrite ? <Button onClick={() => { historyForm.resetFields(); setHistoryOpen(true); }}>Add History</Button> : null}
+                        {canWrite ? <Button className="!rounded-2xl" icon={<PlusOutlined />} onClick={() => { historyForm.resetFields(); setHistoryOpen(true); }}>Add History</Button> : null}
                       </div>
                       <Table rowKey="id" loading={loading} dataSource={histories} columns={historyColumns} pagination={{ pageSize: 5 }} />
                     </Card>
@@ -520,7 +571,7 @@ export default function HRPage() {
                     <Card className="!bg-[var(--cv-card)] !border-white/10 !rounded-3xl h-full">
                       <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
                         <div><div className="text-white font-medium">Qualifications</div><div className="text-white/55 text-sm">Academic and certification records for staff.</div></div>
-                        {canWrite ? <Button onClick={() => { qualificationForm.resetFields(); setQualificationOpen(true); }}>Add Qualification</Button> : null}
+                        {canWrite ? <Button className="!rounded-2xl" icon={<PlusOutlined />} onClick={() => { qualificationForm.resetFields(); setQualificationOpen(true); }}>Add Qualification</Button> : null}
                       </div>
                       <Table rowKey="id" loading={loading} dataSource={qualifications} columns={qualificationColumns} pagination={{ pageSize: 5 }} />
                     </Card>
@@ -529,7 +580,7 @@ export default function HRPage() {
                     <Card className="!bg-[var(--cv-card)] !border-white/10 !rounded-3xl h-full">
                       <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
                         <div><div className="text-white font-medium">Staff Documents</div><div className="text-white/55 text-sm">Compliance and identity document links.</div></div>
-                        {canWrite ? <Button onClick={() => { documentForm.resetFields(); setDocumentOpen(true); }}>Add Document</Button> : null}
+                        {canWrite ? <Button className="!rounded-2xl" icon={<PlusOutlined />} onClick={() => { documentForm.resetFields(); setDocumentOpen(true); }}>Add Document</Button> : null}
                       </div>
                       <Table rowKey="id" loading={loading} dataSource={documents} columns={documentColumns} pagination={{ pageSize: 5 }} />
                     </Card>
@@ -547,7 +598,7 @@ export default function HRPage() {
                   <Card className="!bg-[var(--cv-card)] !border-white/10 !rounded-3xl h-full">
                     <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
                       <div><div className="text-white font-medium">Leave Types</div><div className="text-white/55 text-sm">Paid and unpaid leave policies.</div></div>
-                      {canWrite ? <Button onClick={() => { leaveTypeForm.resetFields(); leaveTypeForm.setFieldsValue({ max_days_per_year: 12, is_paid: true }); setLeaveTypeOpen(true); }}>Add Leave Type</Button> : null}
+                      {canWrite ? <Button className="!rounded-2xl" icon={<PlusOutlined />} onClick={() => { leaveTypeForm.resetFields(); leaveTypeForm.setFieldsValue({ max_days_per_year: 12, is_paid: true }); setLeaveTypeOpen(true); }}>Add Leave Type</Button> : null}
                     </div>
                     <Table rowKey="id" loading={loading} dataSource={leaveTypes} columns={leaveTypeColumns} pagination={{ pageSize: 6 }} />
                   </Card>
@@ -556,7 +607,7 @@ export default function HRPage() {
                   <Card className="!bg-[var(--cv-card)] !border-white/10 !rounded-3xl h-full">
                     <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
                       <div><div className="text-white font-medium">Leave Requests</div><div className="text-white/55 text-sm">Request windows and approval states.</div></div>
-                      {canWrite ? <Button onClick={() => { leaveForm.resetFields(); leaveForm.setFieldsValue({ status: "PENDING" }); setLeaveOpen(true); }}>Create Leave Request</Button> : null}
+                      {canWrite ? <Button className="!rounded-2xl" icon={<PlusOutlined />} onClick={() => { leaveForm.resetFields(); leaveForm.setFieldsValue({ status: "PENDING" }); setLeaveOpen(true); }}>Create Leave Request</Button> : null}
                     </div>
                     <Table rowKey="id" loading={loading} dataSource={leaveRequests} columns={leaveColumns} pagination={{ pageSize: 6 }} />
                   </Card>
@@ -574,7 +625,7 @@ export default function HRPage() {
                     <Card className="!bg-[var(--cv-card)] !border-white/10 !rounded-3xl h-full">
                       <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
                         <div><div className="text-white font-medium">Payroll Structures</div><div className="text-white/55 text-sm">Base salary structures and payroll frequency.</div></div>
-                        {canWrite ? <Button onClick={() => { structureForm.resetFields(); structureForm.setFieldsValue({ pay_frequency: "MONTHLY", currency: "INR" }); setStructureOpen(true); }}>Add Structure</Button> : null}
+                        {canWrite ? <Button className="!rounded-2xl" icon={<PlusOutlined />} onClick={() => { structureForm.resetFields(); structureForm.setFieldsValue({ pay_frequency: "MONTHLY", currency: "INR" }); setStructureOpen(true); }}>Add Structure</Button> : null}
                       </div>
                       <Table rowKey="id" loading={loading} dataSource={structures} columns={structureColumns} pagination={{ pageSize: 5 }} />
                     </Card>
@@ -583,7 +634,7 @@ export default function HRPage() {
                     <Card className="!bg-[var(--cv-card)] !border-white/10 !rounded-3xl h-full">
                       <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
                         <div><div className="text-white font-medium">Payroll Components</div><div className="text-white/55 text-sm">Earnings and deductions per structure.</div></div>
-                        {canWrite ? <Button onClick={() => { componentForm.resetFields(); componentForm.setFieldsValue({ component_type: "EARNING", calculation_type: "FIXED", value: 0, order: 1 }); setComponentOpen(true); }}>Add Component</Button> : null}
+                        {canWrite ? <Button className="!rounded-2xl" icon={<PlusOutlined />} onClick={() => { componentForm.resetFields(); componentForm.setFieldsValue({ component_type: "EARNING", calculation_type: "FIXED", value: 0, order: 1 }); setComponentOpen(true); }}>Add Component</Button> : null}
                       </div>
                       <Table rowKey="id" loading={loading} dataSource={components} columns={componentColumns} pagination={{ pageSize: 5 }} />
                     </Card>
@@ -592,14 +643,14 @@ export default function HRPage() {
                 <Card className="!bg-[var(--cv-card)] !border-white/10 !rounded-3xl">
                   <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
                     <div><div className="text-white font-medium">Staff Payroll Assignments</div><div className="text-white/55 text-sm">Connect staff to payroll structures with effective dates.</div></div>
-                    {canWrite ? <Button onClick={() => { assignmentForm.resetFields(); setAssignmentOpen(true); }}>Assign Structure</Button> : null}
+                    {canWrite ? <Button className="!rounded-2xl" icon={<PlusOutlined />} onClick={() => { assignmentForm.resetFields(); setAssignmentOpen(true); }}>Assign Structure</Button> : null}
                   </div>
                   <Table rowKey="id" loading={loading} dataSource={assignments} columns={assignmentColumns} pagination={{ pageSize: 6 }} />
                 </Card>
                 <Card className="!bg-[var(--cv-card)] !border-white/10 !rounded-3xl">
                   <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
                     <div><div className="text-white font-medium">Payroll Runs</div><div className="text-white/55 text-sm">Manage payroll execution periods.</div></div>
-                    {canWrite ? <Button onClick={() => { runForm.resetFields(); runForm.setFieldsValue({ status: "DRAFT", run_year: new Date().getFullYear(), run_month: new Date().getMonth() + 1 }); setRunOpen(true); }}>Create Run</Button> : null}
+                    {canWrite ? <Button className="!rounded-2xl" icon={<PlusOutlined />} onClick={() => { runForm.resetFields(); runForm.setFieldsValue({ status: "DRAFT", run_year: new Date().getFullYear(), run_month: new Date().getMonth() + 1 }); setRunOpen(true); }}>Create Run</Button> : null}
                   </div>
                   <Table rowKey="id" loading={loading} dataSource={runs} columns={runColumns} pagination={{ pageSize: 6 }} />
                 </Card>

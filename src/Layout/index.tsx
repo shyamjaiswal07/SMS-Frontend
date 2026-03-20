@@ -105,8 +105,8 @@ export default function AppLayout() {
   }, [allowedKeys]);
 
   return (
-    <Layout className="min-h-screen">
-      <Sider breakpoint="lg" collapsedWidth={64} className="!bg-[var(--cv-sider)]">
+    <Layout className="min-h-screen !bg-[var(--cv-bg)]">
+      <Sider breakpoint="lg" collapsedWidth={64} className="!bg-[var(--cv-sider)] !border-r !border-white/10">
         <div className="h-12 flex items-center px-4 text-white font-semibold tracking-wide">Cognivoult</div>
         <Menu
           theme="dark"
@@ -129,11 +129,11 @@ export default function AppLayout() {
           items={menuItems as any}
         />
       </Sider>
-      <Layout>
+      <Layout className="min-w-0 !bg-[var(--cv-bg)]">
         <Header className="!bg-[var(--cv-header)] px-4 flex items-center justify-between border-b border-white/10">
           <div className="font-medium text-white/90">Welcome</div>
         </Header>
-        <Content className="p-4 bg-[var(--cv-bg)]">
+        <Content className="min-w-0 bg-[var(--cv-bg)] px-3 py-3 sm:px-4 sm:py-4 lg:px-5">
           <Outlet />
         </Content>
       </Layout>
