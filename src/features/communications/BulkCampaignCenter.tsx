@@ -1,5 +1,5 @@
 import { EyeOutlined, ReloadOutlined, SendOutlined } from "@ant-design/icons";
-import { Button, Card, Col, Form, Input, Modal, Row, Select, Space, Statistic, Table, Tag, Typography, message } from "antd";
+import { Button, Card, Col, Form, Input, Modal, Row, Select, Space, Statistic, Switch, Table, Tag, Typography, message } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useEffect, useMemo, useState } from "react";
 import apiClient from "@/services/apiClient";
@@ -52,6 +52,14 @@ type CampaignFormValues = {
   scheduled_at?: string;
   metadata_json?: string;
 };
+type DispatchFormValues = { dispatch_now: boolean };
+type DispatchAction = "queue" | "retry";
+type DispatchActionTarget = { id: number; action: DispatchAction; title: string };
+
+const dispatchActionLabels: Record<DispatchAction, string> = {
+  queue: "Queue",
+  retry: "Retry Failed",
+};
 
 function statusColor(status?: string) {
   if (status === "COMPLETED") return "success";
@@ -74,6 +82,7 @@ const roleOptions = [
 
 export default function BulkCampaignCenter() {
   const [campaignForm] = Form.useForm<CampaignFormValues>();
+  const [dispatchForm] = Form.useForm<DispatchFormValues>();
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [actionKey, setActionKey] = useState<string | null>(null);
@@ -84,6 +93,7 @@ export default function BulkCampaignCenter() {
   const [stats, setStats] = useState<CampaignStats | null>(null);
   const [recipients, setRecipients] = useState<Recipient[]>([]);
   const [recipientModalOpen, setRecipientModalOpen] = useState(false);
+  const [campaignDispatchTarget, setCampaignDispatchTarget] = useState<DispatchActionTarget | null>(null);
 
   const loadAll = async () => {
     setLoading(true);
@@ -120,6 +130,36 @@ export default function BulkCampaignCenter() {
 
   const selectedCampaign = useMemo(() => campaigns.find((item) => item.id === selectedCampaignId) ?? null, [campaigns, selectedCampaignId]);
 
+  const submitDispatchAction = async () => {
+    if (!campaignDispatchTarget) return;
+    const target = campaignDispatchTarget;
+
+    try {
+      const values = await dispatchForm.validateFields();
+      const endpoint = target.action === "queue" ? "queue" : "retry-failed";
+      setActionKey(`${target.action}-${target.id}`);
+      const response = await apiClient.post(`/api/communications/bulk-campaigns/${target.id}/${endpoint}/`, { dispatch_now: values.dispatch_now });
+      setStats(response.data as CampaignStats);
+      setSelectedCampaignId(target.id);
+      setCampaignDispatchTarget(null);
+      dispatchForm.resetFields();
+      message.success(
+        values.dispatch_now
+          ? target.action === "queue"
+            ? "Campaign queued for immediate dispatch"
+            : "Retry queued for immediate dispatch"
+          : target.action === "queue"
+            ? "Campaign queued for scheduled dispatch"
+            : "Retry queued for scheduled dispatch",
+      );
+      await loadAll();
+    } catch (error) {
+      message.error(parseApiError(error, target.action === "queue" ? "Unable to queue campaign" : "Unable to retry failed recipients"));
+    } finally {
+      setActionKey(null);
+    }
+  };
+
   const recipientColumns: ColumnsType<Recipient> = [
     { title: "Recipient", dataIndex: "user", render: (value, row) => <span className="text-white/80">{row.user_email || userMap.get(Number(value)) || `#${value}`}</span> },
     { title: "Status", dataIndex: "status", render: (value) => <Tag color={statusColor(value)}>{value}</Tag> },
@@ -154,19 +194,10 @@ export default function BulkCampaignCenter() {
           }}>
             Preview
           </Button>
-          <Button size="small" icon={<SendOutlined />} loading={actionKey === `queue-${row.id}`} onClick={async () => {
-            setActionKey(`queue-${row.id}`);
-            try {
-              const response = await apiClient.post(`/api/communications/bulk-campaigns/${row.id}/queue/`, { dispatch_now: true });
-              setStats(response.data as CampaignStats);
-              setSelectedCampaignId(row.id);
-              message.success("Campaign queued");
-              await loadAll();
-            } catch (error) {
-              message.error(parseApiError(error, "Unable to queue campaign"));
-            } finally {
-              setActionKey(null);
-            }
+          <Button size="small" icon={<SendOutlined />} onClick={() => {
+            dispatchForm.setFieldsValue({ dispatch_now: !row.scheduled_at });
+            setSelectedCampaignId(row.id);
+            setCampaignDispatchTarget({ id: row.id, action: "queue", title: row.title ?? row.name ?? `Campaign #${row.id}` });
           }}>
             Queue
           </Button>
@@ -214,19 +245,10 @@ export default function BulkCampaignCenter() {
           }}>
             Recipients
           </Button>
-          <Button size="small" danger loading={actionKey === `retry-${row.id}`} onClick={async () => {
-            setActionKey(`retry-${row.id}`);
-            try {
-              const response = await apiClient.post(`/api/communications/bulk-campaigns/${row.id}/retry-failed/`, { dispatch_now: true });
-              setStats(response.data as CampaignStats);
-              setSelectedCampaignId(row.id);
-              message.success("Retry queued");
-              await loadAll();
-            } catch (error) {
-              message.error(parseApiError(error, "Unable to retry failed recipients"));
-            } finally {
-              setActionKey(null);
-            }
+          <Button size="small" danger onClick={() => {
+            dispatchForm.setFieldsValue({ dispatch_now: !row.scheduled_at });
+            setSelectedCampaignId(row.id);
+            setCampaignDispatchTarget({ id: row.id, action: "retry", title: row.title ?? row.name ?? `Campaign #${row.id}` });
           }}>
             Retry Failed
           </Button>
@@ -360,6 +382,33 @@ export default function BulkCampaignCenter() {
 
       <Modal title="Campaign Recipients" open={recipientModalOpen} footer={null} onCancel={() => setRecipientModalOpen(false)} width={980}>
         <Table rowKey="id" dataSource={recipients} columns={recipientColumns} pagination={{ pageSize: 8 }} />
+      </Modal>
+
+      <Modal
+        title={campaignDispatchTarget ? `${dispatchActionLabels[campaignDispatchTarget.action]} Campaign` : "Campaign Dispatch"}
+        open={!!campaignDispatchTarget}
+        onCancel={() => {
+          setCampaignDispatchTarget(null);
+          dispatchForm.resetFields();
+        }}
+        onOk={() => void submitDispatchAction()}
+        confirmLoading={campaignDispatchTarget ? actionKey === `${campaignDispatchTarget.action}-${campaignDispatchTarget.id}` : false}
+        okText={campaignDispatchTarget ? dispatchActionLabels[campaignDispatchTarget.action] : "Save"}
+      >
+        <Typography.Paragraph className="!text-white/65">
+          Choose whether to dispatch immediately or keep the campaign in scheduled mode so backend timing controls delivery.
+        </Typography.Paragraph>
+        <div className="rounded-2xl border border-white/10 bg-white/5 p-4 mb-4">
+          <div className="text-white font-medium">{campaignDispatchTarget?.title ?? "Selected Campaign"}</div>
+          <div className="text-white/55 text-sm mt-1">
+            Use scheduled mode when you want the existing `scheduled_at` window to drive the send rather than pushing recipients immediately.
+          </div>
+        </div>
+        <Form<DispatchFormValues> form={dispatchForm} layout="vertical" requiredMark={false}>
+          <Form.Item name="dispatch_now" label="Dispatch Now" valuePropName="checked">
+            <Switch checkedChildren="Now" unCheckedChildren="Later" />
+          </Form.Item>
+        </Form>
       </Modal>
     </div>
   );

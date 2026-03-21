@@ -5,10 +5,16 @@ import AttendanceRiskCenter from "./AttendanceRiskCenter";
 import CurriculumCenter from "./CurriculumCenter";
 import GradingGpaCenter from "./GradingGpaCenter";
 
-export default function AcademicsAdvancedCenter() {
+type Props = {
+  activeTab?: string;
+  onTabChange?: (key: string) => void;
+};
+
+export default function AcademicsAdvancedCenter({ activeTab = "grading", onTabChange }: Props) {
   return (
     <Tabs
-      defaultActiveKey="grading"
+      activeKey={activeTab}
+      onChange={onTabChange}
       items={[
         { key: "grading", label: "Grading + GPA", children: <GradingGpaCenter /> },
         { key: "curriculum", label: "Curriculum", children: <CurriculumCenter /> },

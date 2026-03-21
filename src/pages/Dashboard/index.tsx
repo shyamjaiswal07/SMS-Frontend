@@ -11,6 +11,14 @@ const Students = lazy(() => import("@/pages/StudentsSprint"));
 const Admissions = lazy(() => import("@/pages/Database"));
 const Academics = lazy(() => import("@/pages/AcademicsSprint"));
 
+type QuickLink = {
+  key: string;
+  label: string;
+  description: string;
+  path?: string;
+  module?: ModuleKey;
+};
+
 const DashboardHome: FC = () => {
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
@@ -32,6 +40,87 @@ const DashboardHome: FC = () => {
               
   const module = (params.get("module") as ModuleKey | null) ?? defaultModule;
   const setModule = (m: ModuleKey) => setParams({ module: m });
+
+  const quickLinks = useMemo<QuickLink[]>(() => {
+    switch (role) {
+      case "TEACHER":
+        return [
+          { key: "teacher-workflow", label: "Assignment Workflow", description: "Calendar, publishing, submissions, and grading actions", path: "/academics?scope=advanced&tab=workflow" },
+          { key: "teacher-risk", label: "Attendance Risk", description: "Review flagged attendance cases before escalation", path: "/academics?scope=advanced&tab=attendance-risk" },
+          { key: "teacher-campaigns", label: "Campaigns", description: "Open bulk communications for parent and student outreach", path: "/communications?tab=campaigns" },
+        ];
+      case "HR_MANAGER":
+        return [
+          { key: "hr-lifecycle", label: "Lifecycle Board", description: "Onboarding, offboarding, and checklist status transitions", path: "/hr?scope=advanced&tab=lifecycle" },
+          { key: "hr-payroll", label: "Payroll Documents", description: "Payslips, tax documents, and payroll output review", path: "/hr?scope=advanced&tab=payroll" },
+          { key: "hr-campaigns", label: "Campaigns", description: "Queue HR notices with immediate or scheduled delivery", path: "/communications?tab=campaigns" },
+        ];
+      case "LIBRARIAN":
+        return [
+          { key: "library-reports", label: "Library Reports", description: "Overdue reports, analytics, and late-fee runs", path: "/modules?module=library" },
+          { key: "library-campaigns", label: "Campaigns", description: "Send overdue and membership communication batches", path: "/communications?tab=campaigns" },
+        ];
+      case "TRANSPORT_COORDINATOR":
+        return [
+          { key: "transport-reports", label: "Transport Reports", description: "Occupancy, utilization, and cost-trend reporting", path: "/modules?module=transport" },
+          { key: "transport-campaigns", label: "Campaigns", description: "Open dispatch communications for route updates", path: "/communications?tab=campaigns" },
+        ];
+      case "SUPER_ADMIN":
+      case "SCHOOL_ADMIN":
+        return [
+          { key: "admin-risk", label: "Attendance Risk", description: "Monitor at-risk learners from the academics workspace", path: "/academics?scope=advanced&tab=attendance-risk" },
+          { key: "admin-lifecycle", label: "HR Lifecycle", description: "Jump directly into staff onboarding and offboarding controls", path: "/hr?scope=advanced&tab=lifecycle" },
+          { key: "admin-campaigns", label: "Campaigns", description: "Run scheduled or immediate bulk messaging", path: "/communications?tab=campaigns" },
+          { key: "admin-library", label: "Library Reports", description: "Open library overdue and analytics reporting", path: "/modules?module=library" },
+          { key: "admin-transport", label: "Transport Reports", description: "Open transport occupancy and cost analytics", path: "/modules?module=transport" },
+        ];
+      case "ACCOUNTANT":
+        return [
+          { key: "finance-home", label: "Finance Workspace", description: "Open invoicing, statements, and budget workflows", path: "/finance" },
+          { key: "finance-campaigns", label: "Campaigns", description: "Queue collection reminders or scheduled finance broadcasts", path: "/communications?tab=campaigns" },
+        ];
+      default:
+        return [
+          { key: "messages", label: "Messages", description: "Open the communications workspace", path: "/communications?tab=inbox" },
+        ];
+    }
+  }, [role]);
+
+  const openModuleAction = (key: ModuleKey) => {
+    if (role === "TEACHER" && key === "academics") {
+      navigate("/academics?scope=advanced&tab=workflow");
+      return;
+    }
+    if (role === "HR_MANAGER" && key === "hr") {
+      navigate("/hr?scope=advanced&tab=lifecycle");
+      return;
+    }
+    if (role === "LIBRARIAN" && key === "modules") {
+      navigate("/modules?module=library");
+      return;
+    }
+    if (role === "TRANSPORT_COORDINATOR" && key === "modules") {
+      navigate("/modules?module=transport");
+      return;
+    }
+
+    if (["admin", "modules", "communications", "finance", "hr"].includes(key)) {
+      navigate(`/${key}`);
+      return;
+    }
+
+    setModule(key);
+  };
+
+  const openQuickLink = (link: QuickLink) => {
+    if (link.path) {
+      navigate(link.path);
+      return;
+    }
+    if (link.module) {
+      setModule(link.module);
+    }
+  };
 
   return (
     <div className="space-y-8 relative min-h-screen">
@@ -76,14 +165,39 @@ const DashboardHome: FC = () => {
             key={a.key}
             a={a}
             isActive={module === a.key}
-            onClick={() =>
-              ["admin", "modules", "communications", "finance", "hr"].includes(a.key)
-                ? navigate(`/${a.key}`)
-                : setModule(a.key)
-            }
+            onClick={() => openModuleAction(a.key)}
           />
         ))}
       </div>
+
+      {quickLinks.length ? (
+        <div className="rounded-[2rem] border border-white/10 bg-[var(--cv-card)]/70 shadow-2xl backdrop-blur-3xl overflow-hidden relative">
+          <div className="absolute inset-0 bg-gradient-to-br from-white/[0.02] to-transparent pointer-events-none" />
+          <div className="relative z-10 p-6 md:p-8">
+            <div className="mb-5">
+              <Typography.Title level={4} className="!mb-1 !text-white">
+                Priority Workflows
+              </Typography.Title>
+              <Typography.Paragraph className="!mb-0 !text-white/55">
+                Direct links into the newest analytics, lifecycle, campaign, and operations flows for your role.
+              </Typography.Paragraph>
+            </div>
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              {quickLinks.map((link) => (
+                <button
+                  key={link.key}
+                  type="button"
+                  onClick={() => openQuickLink(link)}
+                  className="rounded-3xl border border-white/10 bg-white/[0.03] p-5 text-left transition hover:border-[var(--cv-accent)]/40 hover:bg-white/[0.06]"
+                >
+                  <div className="text-white font-semibold">{link.label}</div>
+                  <div className="text-white/55 text-sm mt-2 leading-relaxed">{link.description}</div>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {["SUPER_ADMIN", "SCHOOL_ADMIN", "ACCOUNTANT"].includes(role ?? "") && (
         <div className="relative z-10 mt-10 transition-all duration-700 ease-out transform opacity-100 translate-y-0">

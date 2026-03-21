@@ -1,5 +1,5 @@
 import { CheckCircleOutlined, ReloadOutlined } from "@ant-design/icons";
-import { Button, Card, Col, Form, Input, InputNumber, Row, Select, Space, Statistic, Switch, Table, Tag, Typography, message } from "antd";
+import { Button, Card, Col, Form, Input, InputNumber, Modal, Row, Select, Space, Statistic, Switch, Table, Tag, Typography, message } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useEffect, useMemo, useState } from "react";
 import FileAssetUploader from "@/features/files/FileAssetUploader";
@@ -70,6 +70,42 @@ type ChecklistFormValues = {
   due_date?: string;
   note?: string;
 };
+type WorkflowTransitionFormValues = { reason?: string };
+type ChecklistTransitionFormValues = { note?: string };
+type WorkflowAction = "start" | "complete" | "cancel" | "reopen";
+type ChecklistAction = "start" | "complete" | "skip" | "block" | "reopen";
+type WorkflowActionTarget = { id: number; action: WorkflowAction; title: string };
+type ChecklistActionTarget = { id: number; workflowId: number; action: ChecklistAction; title: string };
+
+const workflowActionLabels: Record<WorkflowAction, string> = {
+  start: "Start",
+  complete: "Complete",
+  cancel: "Cancel",
+  reopen: "Reopen",
+};
+
+const workflowActionMessages: Record<WorkflowAction, string> = {
+  start: "Workflow started",
+  complete: "Workflow completed",
+  cancel: "Workflow cancelled",
+  reopen: "Workflow reopened",
+};
+
+const checklistActionLabels: Record<ChecklistAction, string> = {
+  start: "Start",
+  complete: "Complete",
+  skip: "Skip",
+  block: "Block",
+  reopen: "Reopen",
+};
+
+const checklistActionMessages: Record<ChecklistAction, string> = {
+  start: "Checklist item started",
+  complete: "Checklist item completed",
+  skip: "Checklist item skipped",
+  block: "Checklist item blocked",
+  reopen: "Checklist item reopened",
+};
 
 function workflowColor(status?: string) {
   if (status === "COMPLETED") return "success";
@@ -89,6 +125,8 @@ function checklistColor(status?: string) {
 export default function HRLifecycleCenter() {
   const [workflowForm] = Form.useForm<WorkflowFormValues>();
   const [checklistForm] = Form.useForm<ChecklistFormValues>();
+  const [workflowTransitionForm] = Form.useForm<WorkflowTransitionFormValues>();
+  const [checklistTransitionForm] = Form.useForm<ChecklistTransitionFormValues>();
 
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -103,6 +141,8 @@ export default function HRLifecycleCenter() {
   const [selectedWorkflowId, setSelectedWorkflowId] = useState<number | null>(null);
   const [selectedItemId, setSelectedItemId] = useState<number | null>(null);
   const [uploadedEvidenceAssetId, setUploadedEvidenceAssetId] = useState<number | null>(null);
+  const [workflowActionTarget, setWorkflowActionTarget] = useState<WorkflowActionTarget | null>(null);
+  const [checklistActionTarget, setChecklistActionTarget] = useState<ChecklistActionTarget | null>(null);
 
   const loadAll = async () => {
     setLoading(true);
@@ -191,6 +231,50 @@ export default function HRLifecycleCenter() {
   const selectedWorkflow = useMemo(() => workflows.find((item) => item.id === selectedWorkflowId) ?? null, [selectedWorkflowId, workflows]);
   const visibleItems = useMemo(() => (selectedWorkflowId ? items.filter((item) => item.workflow === selectedWorkflowId) : items), [items, selectedWorkflowId]);
 
+  const submitWorkflowTransition = async () => {
+    if (!workflowActionTarget) return;
+    const target = workflowActionTarget;
+
+    try {
+      const values = await workflowTransitionForm.validateFields();
+      setActionKey(`workflow-${target.action}-${target.id}`);
+      await apiClient.post(`/api/hr/lifecycle-workflows/${target.id}/${target.action}/`, values.reason?.trim() ? { reason: values.reason.trim() } : {});
+      message.success(workflowActionMessages[target.action]);
+      setSelectedWorkflowId(target.id);
+      setWorkflowActionTarget(null);
+      workflowTransitionForm.resetFields();
+      await loadAll();
+      await loadWorkflowDetail(target.id);
+    } catch (error) {
+      message.error(parseApiError(error, `Unable to ${target.action} workflow`));
+    } finally {
+      setActionKey(null);
+    }
+  };
+
+  const submitChecklistTransition = async () => {
+    if (!checklistActionTarget) return;
+    const target = checklistActionTarget;
+
+    try {
+      const values = await checklistTransitionForm.validateFields();
+      setActionKey(`checklist-${target.action}-${target.id}`);
+      await apiClient.post(`/api/hr/lifecycle-checklist-items/${target.id}/${target.action}/`, values.note?.trim() ? { note: values.note.trim() } : {});
+      message.success(checklistActionMessages[target.action]);
+      setSelectedWorkflowId(target.workflowId);
+      setSelectedItemId(target.id);
+      setChecklistActionTarget(null);
+      checklistTransitionForm.resetFields();
+      await loadAll();
+      await loadWorkflowDetail(target.workflowId);
+      await loadItemHistory(target.id);
+    } catch (error) {
+      message.error(parseApiError(error, `Unable to ${target.action} checklist item`));
+    } finally {
+      setActionKey(null);
+    }
+  };
+
   const workflowColumns: ColumnsType<Workflow> = [
     { title: "Title", dataIndex: "title", render: (value) => <span className="text-white/85">{value}</span> },
     { title: "Staff", dataIndex: "staff", render: (value) => <span className="text-white/70">{staffMap.get(value) ?? `#${value}`}</span> },
@@ -212,71 +296,11 @@ export default function HRLifecycleCenter() {
       render: (_, row) => (
         <Space wrap>
           <Button size="small" onClick={() => setSelectedItemId(row.id)}>History</Button>
-          {row.status === "PENDING" ? <Button size="small" loading={actionKey === `item-start-${row.id}`} onClick={async () => {
-            setActionKey(`item-start-${row.id}`);
-            try {
-              await apiClient.post(`/api/hr/lifecycle-checklist-items/${row.id}/start/`, {});
-              message.success("Checklist item started");
-              await loadAll();
-              setSelectedItemId(row.id);
-            } catch (error) {
-              message.error(parseApiError(error, "Unable to start checklist item"));
-            } finally {
-              setActionKey(null);
-            }
-          }}>Start</Button> : null}
-          {row.status !== "COMPLETED" && row.status !== "SKIPPED" ? <Button size="small" loading={actionKey === `item-complete-${row.id}`} onClick={async () => {
-            setActionKey(`item-complete-${row.id}`);
-            try {
-              await apiClient.post(`/api/hr/lifecycle-checklist-items/${row.id}/complete/`, {});
-              message.success("Checklist item completed");
-              await loadAll();
-              setSelectedItemId(row.id);
-            } catch (error) {
-              message.error(parseApiError(error, "Unable to complete checklist item"));
-            } finally {
-              setActionKey(null);
-            }
-          }}>Complete</Button> : null}
-          {!row.is_required && row.status !== "SKIPPED" && row.status !== "COMPLETED" ? <Button size="small" loading={actionKey === `item-skip-${row.id}`} onClick={async () => {
-            setActionKey(`item-skip-${row.id}`);
-            try {
-              await apiClient.post(`/api/hr/lifecycle-checklist-items/${row.id}/skip/`, {});
-              message.success("Checklist item skipped");
-              await loadAll();
-              setSelectedItemId(row.id);
-            } catch (error) {
-              message.error(parseApiError(error, "Unable to skip checklist item"));
-            } finally {
-              setActionKey(null);
-            }
-          }}>Skip</Button> : null}
-          {row.status !== "COMPLETED" && row.status !== "SKIPPED" ? <Button size="small" danger loading={actionKey === `item-block-${row.id}`} onClick={async () => {
-            setActionKey(`item-block-${row.id}`);
-            try {
-              await apiClient.post(`/api/hr/lifecycle-checklist-items/${row.id}/block/`, {});
-              message.success("Checklist item blocked");
-              await loadAll();
-              setSelectedItemId(row.id);
-            } catch (error) {
-              message.error(parseApiError(error, "Unable to block checklist item"));
-            } finally {
-              setActionKey(null);
-            }
-          }}>Block</Button> : null}
-          {row.status === "COMPLETED" || row.status === "SKIPPED" || row.status === "BLOCKED" ? <Button size="small" loading={actionKey === `item-reopen-${row.id}`} onClick={async () => {
-            setActionKey(`item-reopen-${row.id}`);
-            try {
-              await apiClient.post(`/api/hr/lifecycle-checklist-items/${row.id}/reopen/`, {});
-              message.success("Checklist item reopened");
-              await loadAll();
-              setSelectedItemId(row.id);
-            } catch (error) {
-              message.error(parseApiError(error, "Unable to reopen checklist item"));
-            } finally {
-              setActionKey(null);
-            }
-          }}>Reopen</Button> : null}
+          {row.status === "PENDING" ? <Button size="small" onClick={() => { checklistTransitionForm.resetFields(); setChecklistActionTarget({ id: row.id, workflowId: row.workflow, action: "start", title: row.title ?? `Checklist Item #${row.id}` }); }}>Start</Button> : null}
+          {row.status !== "COMPLETED" && row.status !== "SKIPPED" ? <Button size="small" onClick={() => { checklistTransitionForm.resetFields(); setChecklistActionTarget({ id: row.id, workflowId: row.workflow, action: "complete", title: row.title ?? `Checklist Item #${row.id}` }); }}>Complete</Button> : null}
+          {!row.is_required && row.status !== "SKIPPED" && row.status !== "COMPLETED" ? <Button size="small" onClick={() => { checklistTransitionForm.resetFields(); setChecklistActionTarget({ id: row.id, workflowId: row.workflow, action: "skip", title: row.title ?? `Checklist Item #${row.id}` }); }}>Skip</Button> : null}
+          {row.status !== "COMPLETED" && row.status !== "SKIPPED" ? <Button size="small" danger onClick={() => { checklistTransitionForm.resetFields(); setChecklistActionTarget({ id: row.id, workflowId: row.workflow, action: "block", title: row.title ?? `Checklist Item #${row.id}` }); }}>Block</Button> : null}
+          {row.status === "COMPLETED" || row.status === "SKIPPED" || row.status === "BLOCKED" ? <Button size="small" onClick={() => { checklistTransitionForm.resetFields(); setChecklistActionTarget({ id: row.id, workflowId: row.workflow, action: "reopen", title: row.title ?? `Checklist Item #${row.id}` }); }}>Reopen</Button> : null}
         </Space>
       ),
     },
@@ -421,58 +445,10 @@ export default function HRLifecycleCenter() {
                 render: (_, row: Workflow) => (
                   <Space wrap>
                     <Button size="small" onClick={() => setSelectedWorkflowId(row.id)}>Inspect</Button>
-                    {row.status === "DRAFT" ? <Button size="small" loading={actionKey === `workflow-start-${row.id}`} onClick={async () => {
-                      setActionKey(`workflow-start-${row.id}`);
-                      try {
-                        await apiClient.post(`/api/hr/lifecycle-workflows/${row.id}/start/`, {});
-                        message.success("Workflow started");
-                        await loadAll();
-                        setSelectedWorkflowId(row.id);
-                      } catch (error) {
-                        message.error(parseApiError(error, "Unable to start workflow"));
-                      } finally {
-                        setActionKey(null);
-                      }
-                    }}>Start</Button> : null}
-                    {row.status === "IN_PROGRESS" ? <Button size="small" loading={actionKey === `workflow-complete-${row.id}`} onClick={async () => {
-                      setActionKey(`workflow-complete-${row.id}`);
-                      try {
-                        await apiClient.post(`/api/hr/lifecycle-workflows/${row.id}/complete/`, {});
-                        message.success("Workflow completed");
-                        await loadAll();
-                        setSelectedWorkflowId(row.id);
-                      } catch (error) {
-                        message.error(parseApiError(error, "Unable to complete workflow"));
-                      } finally {
-                        setActionKey(null);
-                      }
-                    }}>Complete</Button> : null}
-                    {row.status === "DRAFT" || row.status === "IN_PROGRESS" ? <Button size="small" danger loading={actionKey === `workflow-cancel-${row.id}`} onClick={async () => {
-                      setActionKey(`workflow-cancel-${row.id}`);
-                      try {
-                        await apiClient.post(`/api/hr/lifecycle-workflows/${row.id}/cancel/`, {});
-                        message.success("Workflow cancelled");
-                        await loadAll();
-                        setSelectedWorkflowId(row.id);
-                      } catch (error) {
-                        message.error(parseApiError(error, "Unable to cancel workflow"));
-                      } finally {
-                        setActionKey(null);
-                      }
-                    }}>Cancel</Button> : null}
-                    {row.status === "COMPLETED" || row.status === "CANCELLED" ? <Button size="small" loading={actionKey === `workflow-reopen-${row.id}`} onClick={async () => {
-                      setActionKey(`workflow-reopen-${row.id}`);
-                      try {
-                        await apiClient.post(`/api/hr/lifecycle-workflows/${row.id}/reopen/`, {});
-                        message.success("Workflow reopened");
-                        await loadAll();
-                        setSelectedWorkflowId(row.id);
-                      } catch (error) {
-                        message.error(parseApiError(error, "Unable to reopen workflow"));
-                      } finally {
-                        setActionKey(null);
-                      }
-                    }}>Reopen</Button> : null}
+                    {row.status === "DRAFT" ? <Button size="small" onClick={() => { workflowTransitionForm.resetFields(); setWorkflowActionTarget({ id: row.id, action: "start", title: row.title ?? `Workflow #${row.id}` }); }}>Start</Button> : null}
+                    {row.status === "IN_PROGRESS" ? <Button size="small" onClick={() => { workflowTransitionForm.resetFields(); setWorkflowActionTarget({ id: row.id, action: "complete", title: row.title ?? `Workflow #${row.id}` }); }}>Complete</Button> : null}
+                    {row.status === "DRAFT" || row.status === "IN_PROGRESS" ? <Button size="small" danger onClick={() => { workflowTransitionForm.resetFields(); setWorkflowActionTarget({ id: row.id, action: "cancel", title: row.title ?? `Workflow #${row.id}` }); }}>Cancel</Button> : null}
+                    {row.status === "COMPLETED" || row.status === "CANCELLED" ? <Button size="small" onClick={() => { workflowTransitionForm.resetFields(); setWorkflowActionTarget({ id: row.id, action: "reopen", title: row.title ?? `Workflow #${row.id}` }); }}>Reopen</Button> : null}
                   </Space>
                 ),
               },
@@ -536,6 +512,47 @@ export default function HRLifecycleCenter() {
           )}
         </Card>
       </div>
+      <Modal
+        title={workflowActionTarget ? `${workflowActionLabels[workflowActionTarget.action]} Workflow` : "Workflow Transition"}
+        open={!!workflowActionTarget}
+        onCancel={() => {
+          setWorkflowActionTarget(null);
+          workflowTransitionForm.resetFields();
+        }}
+        onOk={() => void submitWorkflowTransition()}
+        confirmLoading={workflowActionTarget ? actionKey === `workflow-${workflowActionTarget.action}-${workflowActionTarget.id}` : false}
+        okText={workflowActionTarget ? workflowActionLabels[workflowActionTarget.action] : "Save"}
+      >
+        <Typography.Paragraph className="!text-white/65">
+          Add an optional operator reason so the transition history captures why this workflow changed state.
+        </Typography.Paragraph>
+        <Form<WorkflowTransitionFormValues> form={workflowTransitionForm} layout="vertical" requiredMark={false}>
+          <Form.Item name="reason" label="Reason">
+            <Input.TextArea rows={4} placeholder="Example: equipment returned and manager sign-off received" />
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      <Modal
+        title={checklistActionTarget ? `${checklistActionLabels[checklistActionTarget.action]} Checklist Item` : "Checklist Transition"}
+        open={!!checklistActionTarget}
+        onCancel={() => {
+          setChecklistActionTarget(null);
+          checklistTransitionForm.resetFields();
+        }}
+        onOk={() => void submitChecklistTransition()}
+        confirmLoading={checklistActionTarget ? actionKey === `checklist-${checklistActionTarget.action}-${checklistActionTarget.id}` : false}
+        okText={checklistActionTarget ? checklistActionLabels[checklistActionTarget.action] : "Save"}
+      >
+        <Typography.Paragraph className="!text-white/65">
+          Add an optional note for the assignee or reviewer. It will be stored in the checklist item history.
+        </Typography.Paragraph>
+        <Form<ChecklistTransitionFormValues> form={checklistTransitionForm} layout="vertical" requiredMark={false}>
+          <Form.Item name="note" label="Note">
+            <Input.TextArea rows={4} placeholder="Example: waiting on badge printing from facilities" />
+          </Form.Item>
+        </Form>
+      </Modal>
     </div>
   );
 }

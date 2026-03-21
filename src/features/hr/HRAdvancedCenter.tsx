@@ -3,10 +3,16 @@ import HRLifecycleCenter from "./HRLifecycleCenter";
 import PayrollDocumentCenter from "./PayrollDocumentCenter";
 import HRWorkflowCenter from "./HRWorkflowCenter";
 
-export default function HRAdvancedCenter() {
+type Props = {
+  activeTab?: string;
+  onTabChange?: (key: string) => void;
+};
+
+export default function HRAdvancedCenter({ activeTab = "workflow", onTabChange }: Props) {
   return (
     <Tabs
-      defaultActiveKey="workflow"
+      activeKey={activeTab}
+      onChange={onTabChange}
       items={[
         { key: "workflow", label: "Workflow + Attendance", children: <HRWorkflowCenter /> },
         { key: "lifecycle", label: "Lifecycle", children: <HRLifecycleCenter /> },

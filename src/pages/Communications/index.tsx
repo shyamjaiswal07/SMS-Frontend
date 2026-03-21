@@ -2,6 +2,7 @@ import { BellOutlined, MessageOutlined, NotificationOutlined, PlusOutlined, Push
 import { Button, Card, Col, Empty, Form, Input, Modal, Row, Select, Space, Statistic, Switch, Table, Tabs, Tag, Tooltip, Typography, message } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import BulkCampaignCenter from "@/features/communications/BulkCampaignCenter";
 import apiClient from "@/services/apiClient";
 
@@ -44,6 +45,7 @@ function getRole(): Role | undefined {
 }
 
 export default function CommunicationsPage() {
+  const [params, setParams] = useSearchParams();
   const role = useMemo(() => getRole(), []);
   const canAnnounce = role === "SUPER_ADMIN" || role === "SCHOOL_ADMIN" || role === "TEACHER";
   const canThread = role === "SUPER_ADMIN" || role === "SCHOOL_ADMIN" || role === "TEACHER" || role === "PARENT" || role === "STUDENT";
@@ -300,7 +302,12 @@ export default function CommunicationsPage() {
       </Row>
 
       <Tabs
-        defaultActiveKey="inbox"
+        activeKey={params.get("tab") || "inbox"}
+        onChange={(key) => {
+          const next = new URLSearchParams(params);
+          next.set("tab", key);
+          setParams(next, { replace: true });
+        }}
         items={[
           {
             key: "inbox",
