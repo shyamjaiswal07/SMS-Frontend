@@ -19,6 +19,9 @@ type AutomationSettingsForm = {
   attendance_alert_min_records: number;
   attendance_alert_window_days: number;
   transport_notify_before_days: number;
+  library_late_fee_per_day: number;
+  library_late_fee_grace_days: number;
+  library_late_fee_max_amount: number;
 };
 
 const defaultValues: AutomationSettingsForm = {
@@ -27,6 +30,9 @@ const defaultValues: AutomationSettingsForm = {
   attendance_alert_min_records: 5,
   attendance_alert_window_days: 30,
   transport_notify_before_days: 1,
+  library_late_fee_per_day: 5,
+  library_late_fee_grace_days: 0,
+  library_late_fee_max_amount: 100,
 };
 
 export default function AutomationCenter() {
@@ -53,6 +59,9 @@ export default function AutomationCenter() {
         attendance_alert_min_records: Number(settings.attendance_alert_min_records ?? defaultValues.attendance_alert_min_records),
         attendance_alert_window_days: Number(settings.attendance_alert_window_days ?? defaultValues.attendance_alert_window_days),
         transport_notify_before_days: Number(settings.transport_notify_before_days ?? defaultValues.transport_notify_before_days),
+        library_late_fee_per_day: Number(settings.library_late_fee_per_day ?? defaultValues.library_late_fee_per_day),
+        library_late_fee_grace_days: Number(settings.library_late_fee_grace_days ?? defaultValues.library_late_fee_grace_days),
+        library_late_fee_max_amount: Number(settings.library_late_fee_max_amount ?? defaultValues.library_late_fee_max_amount),
       });
     } catch (error) {
       message.error(parseApiError(error, "Failed to load automation settings"));
@@ -146,6 +155,23 @@ export default function AutomationCenter() {
             <Form.Item name="transport_notify_before_days" label="Transport Notify Before Days" rules={[{ required: true }]}>
               <InputNumber className="!w-full" min={0} />
             </Form.Item>
+            <Row gutter={12}>
+              <Col xs={24} md={8}>
+                <Form.Item name="library_late_fee_per_day" label="Library Late Fee / Day" rules={[{ required: true }]}>
+                  <InputNumber className="!w-full" min={0} />
+                </Form.Item>
+              </Col>
+              <Col xs={24} md={8}>
+                <Form.Item name="library_late_fee_grace_days" label="Library Grace Days" rules={[{ required: true }]}>
+                  <InputNumber className="!w-full" min={0} />
+                </Form.Item>
+              </Col>
+              <Col xs={24} md={8}>
+                <Form.Item name="library_late_fee_max_amount" label="Library Max Late Fee" rules={[{ required: true }]}>
+                  <InputNumber className="!w-full" min={0} />
+                </Form.Item>
+              </Col>
+            </Row>
 
             <Button htmlType="submit" type="primary" className="!rounded-2xl !bg-[var(--cv-accent)] !border-0">
               Save Settings
@@ -155,13 +181,15 @@ export default function AutomationCenter() {
 
         <Card className="!bg-[var(--cv-card)] !border-white/10 !rounded-3xl">
           <div className="text-white font-medium mb-1">Manual Automation Runs</div>
-          <div className="text-white/55 text-sm mb-4">Use these controls to validate payment reminders, attendance alerts, and transport notifications immediately.</div>
+          <div className="text-white/55 text-sm mb-4">Use these controls to validate payment reminders, attendance alerts, transport notifications, bulk campaigns, and library late fees immediately.</div>
 
           <Space direction="vertical" className="!w-full">
             {[
               { label: "Run Payment Reminders", taskType: "PAYMENT_REMINDERS" },
               { label: "Run Attendance Alerts", taskType: "ATTENDANCE_ALERTS" },
               { label: "Run Transport Notifications", taskType: "TRANSPORT_NOTIFICATIONS" },
+              { label: "Run Bulk Campaigns", taskType: "BULK_CAMPAIGNS" },
+              { label: "Run Library Late Fees", taskType: "LIBRARY_LATE_FEES" },
             ].map((item) => (
               <Button
                 key={item.taskType}

@@ -33,8 +33,8 @@ const moduleConfigs: ModuleConfig[] = [
   { key: "academics", title: "Academics", icon: <BookOutlined />, route: "/academics" },
   { key: "finance", title: "Finance", icon: <DollarOutlined />, route: "/finance" },
   { key: "hr", title: "HR", icon: <TeamOutlined />, route: "/hr" },
-  { key: "library", title: "Library", icon: <ReadOutlined />, route: "/modules" },
-  { key: "transport", title: "Transport", icon: <CarOutlined />, route: "/modules" },
+  { key: "library", title: "Library", icon: <ReadOutlined />, route: "/modules?module=library" },
+  { key: "transport", title: "Transport", icon: <CarOutlined />, route: "/modules?module=transport" },
   { key: "communications", title: "Communications", icon: <BellOutlined />, route: "/communications" },
 ];
 

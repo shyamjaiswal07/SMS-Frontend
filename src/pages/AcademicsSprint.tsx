@@ -8,7 +8,7 @@ export default function AcademicsSprintPage() {
       defaultActiveKey="core"
       items={[
         { key: "core", label: "Core Academics", children: <AcademicsCore /> },
-        { key: "advanced", label: "Grading, Curriculum, Artifacts", children: <AcademicsAdvancedCenter /> },
+        { key: "advanced", label: "Workflows, Risk, Grading, Artifacts", children: <AcademicsAdvancedCenter /> },
       ]}
     />
   );

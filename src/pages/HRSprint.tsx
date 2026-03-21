@@ -8,7 +8,7 @@ export default function HRSprintPage() {
       defaultActiveKey="core"
       items={[
         { key: "core", label: "Core HR", children: <HRCore /> },
-        { key: "advanced", label: "Attendance, Performance, Payroll", children: <HRAdvancedCenter /> },
+        { key: "advanced", label: "Attendance, Lifecycle, Payroll", children: <HRAdvancedCenter /> },
       ]}
     />
   );

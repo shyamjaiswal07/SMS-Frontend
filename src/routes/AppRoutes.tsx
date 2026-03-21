@@ -29,22 +29,120 @@ const AppRoutes = () => {
       ),
       children: [
         { index: true, element: <Navigate to="dashboard" replace /> },
-        { path: "dashboard", element: <Suspense><DashboardSprintPage /></Suspense> },
-        { path: "dashboard/:lotId", element: <Suspense><Upload /></Suspense> },
-        { path: "students", element: <Suspense><StudentsSprintPage /></Suspense> },
-        { path: "database", element: <Suspense><Database /></Suspense> },
-        { path: "academics", element: <Suspense><AcademicsSprintPage /></Suspense> },
-        { path: "admin", element: <Suspense><AdminSprintPage /></Suspense> },
-        { path: "communications", element: <Suspense><Communications /></Suspense> },
-        { path: "finance", element: <Suspense><FinanceSprintPage /></Suspense> },
-        { path: "hr", element: <Suspense><HRSprintPage /></Suspense> },
-        { path: "modules", element: <Suspense><Modules /></Suspense> },
+        {
+          path: "dashboard",
+          element: (
+            <Suspense>
+              <DashboardSprintPage />
+            </Suspense>
+          ),
+        },
+        {
+          path: "dashboard/:lotId",
+          element: (
+            <Suspense>
+              <Upload />
+            </Suspense>
+          ),
+        },
+        {
+          path: "students",
+          element: (
+            <Suspense>
+              <StudentsSprintPage />
+            </Suspense>
+          ),
+        },
+        {
+          path: "database",
+          element: (
+            <Suspense>
+              <Database />
+            </Suspense>
+          ),
+        },
+        {
+          path: "academics",
+          element: (
+            <Suspense>
+              <AcademicsSprintPage />
+            </Suspense>
+          ),
+        },
+        {
+          path: "admin",
+          element: (
+            <Suspense>
+              <AdminSprintPage />
+            </Suspense>
+          ),
+        },
+        {
+          path: "communications",
+          element: (
+            <Suspense>
+              <Communications />
+            </Suspense>
+          ),
+        },
+        {
+          path: "finance",
+          element: (
+            <Suspense>
+              <FinanceSprintPage />
+            </Suspense>
+          ),
+        },
+        {
+          path: "hr",
+          element: (
+            <Suspense>
+              <HRSprintPage />
+            </Suspense>
+          ),
+        },
+        {
+          path: "modules",
+          element: (
+            <Suspense>
+              <Modules />
+            </Suspense>
+          ),
+        },
       ],
     },
-    { path: "/login", element: <Suspense><Login /></Suspense> },
-    { path: "/register", element: <Suspense><Register /></Suspense> },
-    { path: "/forgot-password", element: <Suspense><ForgotPassword /></Suspense> },
-    { path: "/reset-password", element: <Suspense><ResetPassword /></Suspense> },
+    {
+      path: "/login",
+      element: (
+        <Suspense>
+          <Login />
+        </Suspense>
+      ),
+    },
+    {
+      path: "/register",
+      element: (
+        <Suspense>
+          <Register />
+        </Suspense>
+      ),
+    },
+    {
+      path: "/forgot-password",
+      element: (
+        <Suspense>
+          <ForgotPassword />
+        </Suspense>
+      ),
+    },
+    {
+      path: "/reset-password",
+      element: (
+        <Suspense>
+          <ResetPassword />
+        </Suspense>
+      ),
+    },
     { path: "*", element: <Suspense>{/* <NotFound /> */}</Suspense> },
   ];
 

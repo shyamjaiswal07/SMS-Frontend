@@ -2,6 +2,7 @@ import { BellOutlined, MessageOutlined, NotificationOutlined, PlusOutlined, Push
 import { Button, Card, Col, Empty, Form, Input, Modal, Row, Select, Space, Statistic, Switch, Table, Tabs, Tag, Tooltip, Typography, message } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useEffect, useMemo, useState } from "react";
+import BulkCampaignCenter from "@/features/communications/BulkCampaignCenter";
 import apiClient from "@/services/apiClient";
 
 type Role =
@@ -417,6 +418,11 @@ export default function CommunicationsPage() {
                 </Row>
               </div>
             ),
+          },
+          {
+            key: "campaigns",
+            label: "Campaigns",
+            children: <BulkCampaignCenter />,
           },
           {
             key: "notifications",

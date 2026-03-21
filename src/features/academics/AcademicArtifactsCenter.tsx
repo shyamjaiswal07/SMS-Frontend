@@ -11,7 +11,7 @@ type Term = { id: number; name?: string };
 type Artifact = { id: number; student?: number; artifact_type?: string; template_name?: string; template_version?: string; verification_code?: string; issued_on?: string };
 type VerifyResponse = { verification_code?: string; is_valid?: boolean; artifact_type?: string; student_name?: string; template_name?: string; template_version?: string; issued_on?: string };
 
-type ArtifactForm = { student_id: number; academic_year_id?: number; term_id?: number; artifact_type: "REPORT_CARD" | "CERTIFICATE"; template_name: string; template_version: string; metadata_json?: string };
+type ArtifactForm = { student_id: number; academic_year_id?: number; term_id?: number; artifact_type: "REPORT_CARD" | "CERTIFICATE" | "TRANSCRIPT"; template_name: string; template_version: string; metadata_json?: string };
 type VerifyForm = { verification_code: string };
 
 export default function AcademicArtifactsCenter() {
@@ -75,10 +75,10 @@ export default function AcademicArtifactsCenter() {
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
           <Typography.Title level={4} className="!mb-0 !text-white">
-            Report Cards + Certificates
+            Academic Artifacts
           </Typography.Title>
           <Typography.Paragraph className="!mb-0 !text-white/60">
-            Generate artifacts, download PDFs, and verify documents by public verification code.
+            Generate report cards, certificates, transcripts, and verify documents by public verification code.
           </Typography.Paragraph>
         </div>
         <Button icon={<ReloadOutlined />} onClick={() => void loadAll()} loading={loading}>
@@ -96,7 +96,7 @@ export default function AcademicArtifactsCenter() {
               <Col span={12}><Form.Item name="term_id" label="Term"><Select allowClear options={terms.map((item) => ({ value: item.id, label: termMap.get(item.id) ?? item.name }))} /></Form.Item></Col>
             </Row>
             <Row gutter={12}>
-              <Col span={12}><Form.Item name="artifact_type" label="Type" rules={[{ required: true }]}><Select options={[{ label: "Report Card", value: "REPORT_CARD" }, { label: "Certificate", value: "CERTIFICATE" }]} /></Form.Item></Col>
+              <Col span={12}><Form.Item name="artifact_type" label="Type" rules={[{ required: true }]}><Select options={[{ label: "Report Card", value: "REPORT_CARD" }, { label: "Certificate", value: "CERTIFICATE" }, { label: "Transcript", value: "TRANSCRIPT" }]} /></Form.Item></Col>
               <Col span={12}><Form.Item name="template_name" label="Template" rules={[{ required: true }]}><Input /></Form.Item></Col>
             </Row>
             <Form.Item name="template_version" label="Template Version" rules={[{ required: true }]}><Input /></Form.Item>
@@ -113,7 +113,9 @@ export default function AcademicArtifactsCenter() {
                   const endpoint =
                     values.artifact_type === "REPORT_CARD"
                       ? "/api/academics/artifacts/report-card/generate/"
-                      : "/api/academics/artifacts/certificate/generate/";
+                      : values.artifact_type === "CERTIFICATE"
+                        ? "/api/academics/artifacts/certificate/generate/"
+                        : "/api/academics/artifacts/transcript/generate/";
                   await apiClient.post(endpoint, {
                     student_id: values.student_id,
                     academic_year_id: values.academic_year_id,
@@ -122,7 +124,7 @@ export default function AcademicArtifactsCenter() {
                     template_version: values.template_version,
                     metadata: values.metadata_json?.trim() ? JSON.parse(values.metadata_json) : {},
                   });
-                  message.success("Artifact generated");
+                  message.success(`${values.artifact_type.replace(/_/g, " ")} generated`);
                   artifactForm.resetFields();
                   await loadAll();
                 } catch (error) {

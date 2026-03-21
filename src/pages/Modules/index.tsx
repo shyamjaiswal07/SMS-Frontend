@@ -2,13 +2,28 @@ import { BellOutlined, CarOutlined, DollarOutlined, HomeOutlined, ReadOutlined, 
 import { Alert, Spin, Table, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
+import ModuleReportsPanel from "@/features/erp/ModuleReportsPanel";
 import OperationsPanel from "@/features/erp/OperationsPanel";
 import { erpApi, erpModuleConfigs, type DataSetConfig, type SummaryConfig } from "@/features/erp/erpApi";
+import { currentTenant } from "@/utils/platform";
 
 type GenericRow = Record<string, unknown> & { id?: number | string };
 type LoadState = { rows: GenericRow[]; count: number; loading: boolean; error?: string };
 type SummaryState = { data?: Record<string, unknown>; loading: boolean; error?: string };
 type ModuleKey = keyof typeof erpModuleConfigs;
+
+function isModuleKey(value: string | null): value is ModuleKey {
+  return !!value && value in erpModuleConfigs;
+}
+
+function defaultModuleForRole(role?: string): ModuleKey {
+  if (role === "LIBRARIAN") return "library";
+  if (role === "TRANSPORT_COORDINATOR") return "transport";
+  if (role === "HR_MANAGER") return "hr";
+  if (role === "ACCOUNTANT") return "finance";
+  return "institutions";
+}
 
 const icons: Record<ModuleKey, JSX.Element> = {
   institutions: <HomeOutlined />,
@@ -96,7 +111,10 @@ function SummaryCards({ summaries }: { summaries: Array<{ title: string; state: 
 }
 
 export default function ModulesPage() {
-  const [activeKey, setActiveKey] = useState<ModuleKey>("institutions");
+  const tenant = currentTenant();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialModule = isModuleKey(searchParams.get("module")) ? (searchParams.get("module") as ModuleKey) : defaultModuleForRole(tenant?.role);
+  const [activeKey, setActiveKey] = useState<ModuleKey>(initialModule);
   const [dataStates, setDataStates] = useState<Record<string, LoadState>>({});
   const [summaryStates, setSummaryStates] = useState<Record<string, SummaryState>>({});
 
@@ -140,7 +158,20 @@ export default function ModulesPage() {
     ]);
   };
 
-  useEffect(() => { void loadModule(activeKey); }, [activeKey]);
+  useEffect(() => {
+    const requested = searchParams.get("module");
+    if (isModuleKey(requested) && requested !== activeKey) {
+      setActiveKey(requested);
+      return;
+    }
+    void loadModule(activeKey);
+  }, [activeKey, searchParams]);
+
+  useEffect(() => {
+    if (searchParams.get("module") !== activeKey) {
+      setSearchParams({ module: activeKey }, { replace: true });
+    }
+  }, [activeKey]);
 
   const currentConfig = erpModuleConfigs[activeKey];
   const summaryItems = useMemo(
@@ -214,6 +245,7 @@ export default function ModulesPage() {
       {/* Module Content Display */}
       <div className="space-y-6 transition-all duration-500 ease-out transform opacity-100 translate-y-0">
         <SummaryCards summaries={summaryItems} />
+        {activeKey === "library" || activeKey === "transport" ? <ModuleReportsPanel moduleKey={activeKey} /> : null}
         
         {currentConfig.dataSets.map((item) => {
           const state = dataStates[item.key] ?? { rows: [], count: 0, loading: false };
