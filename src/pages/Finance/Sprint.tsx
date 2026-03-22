@@ -1,6 +1,6 @@
 import { Tabs } from "antd";
-import FinanceCore from "@/pages/Finance";
 import FinanceAdvancedCenter from "@/features/finance/FinanceAdvancedCenter";
+import FinanceCore from "./index";
 
 export default function FinanceSprintPage() {
   return (

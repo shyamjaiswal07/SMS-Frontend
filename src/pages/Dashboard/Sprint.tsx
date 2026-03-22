@@ -1,8 +1,6 @@
-import { Space, Tag } from "antd";
-import DashboardCore from "@/pages/Dashboard";
+import DashboardCore from "./index";
 
 export default function DashboardSprintPage() {
-
   return (
     <div>
       <DashboardCore />

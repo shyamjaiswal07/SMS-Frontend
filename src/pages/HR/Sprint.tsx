@@ -1,7 +1,7 @@
 import { Tabs } from "antd";
 import { useSearchParams } from "react-router-dom";
-import HRCore from "@/pages/HR";
 import HRAdvancedCenter from "@/features/hr/HRAdvancedCenter";
+import HRCore from "./index";
 
 export default function HRSprintPage() {
   const [params, setParams] = useSearchParams();

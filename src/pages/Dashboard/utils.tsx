@@ -2,22 +2,28 @@ import { useMemo } from "react";
 import {
   AppstoreOutlined,
   AuditOutlined,
+  BankOutlined,
   BellOutlined,
   BookOutlined,
+  CarOutlined,
   DollarOutlined,
+  ReadOutlined,
   TeamOutlined,
   UserOutlined,
 } from "@ant-design/icons";
 
 export type ModuleKey =
+  | "institutions"
   | "students"
   | "academics"
   | "admissions"
   | "admin"
+  | "library"
   | "modules"
   | "communications"
   | "finance"
-  | "hr";
+  | "hr"
+  | "transport";
 
 export type ActionCard = {
   key: ModuleKey;
@@ -71,29 +77,33 @@ export function useDashboardActions(role: string | undefined): ActionCard[] {
           { key: "modules", title: "ERP Modules", desc: "Extended HR and ERP API coverage", icon: <AppstoreOutlined /> },
         ];
       case "LIBRARIAN":
+        return [
+          { key: "communications", title: "Communications", desc: "Notifications and shared operational messaging", icon: <BellOutlined /> },
+          { key: "library", title: "Library", desc: "Catalog, circulation, and reporting in the dedicated module", icon: <ReadOutlined /> },
+        ];
       case "TRANSPORT_COORDINATOR":
         return [
           { key: "communications", title: "Communications", desc: "Notifications and shared operational messaging", icon: <BellOutlined /> },
-          { key: "modules", title: "ERP Modules", desc: "Operational APIs for your assigned domain", icon: <AppstoreOutlined /> },
+          { key: "transport", title: "Transport", desc: "Routes, allocations, and reporting in the dedicated module", icon: <CarOutlined /> },
         ];
       case "SCHOOL_ADMIN":
         return [
+          { key: "institutions", title: "Institutions", desc: "Tenancy, academic setup, and facilities", icon: <BankOutlined /> },
           { key: "students", title: "Students", desc: "Search and view student records", icon: <UserOutlined /> },
           { key: "admissions", title: "Admissions", desc: "Manage admission applications", icon: <AppstoreOutlined /> },
           { key: "academics", title: "Academics", desc: "Courses and class schedules", icon: <BookOutlined /> },
           { key: "finance", title: "Finance", desc: "Invoices, fee setup, and payment collections", icon: <DollarOutlined /> },
           { key: "hr", title: "HR", desc: "Staff records, leave workflows, and payroll runs", icon: <TeamOutlined /> },
           { key: "communications", title: "Communications", desc: "Announcements, notifications, and inbox workflows", icon: <BellOutlined /> },
-          { key: "modules", title: "ERP Modules", desc: "Institution, finance, HR, comms, library, transport", icon: <AppstoreOutlined /> },
           { key: "admin", title: "Admin Controls", desc: "Users, memberships and security", icon: <AuditOutlined /> },
         ];
       case "SUPER_ADMIN":
         return [
+          { key: "institutions", title: "Institutions", desc: "School tenancy, subscriptions, and setup records", icon: <BankOutlined /> },
           { key: "admin", title: "Admin Controls", desc: "Users, permissions, memberships and security", icon: <AuditOutlined /> },
           { key: "finance", title: "Finance", desc: "Fee structures, invoices, collections, and summaries", icon: <DollarOutlined /> },
           { key: "hr", title: "HR", desc: "Staff lifecycle, leave, payroll runs, and payslips", icon: <TeamOutlined /> },
           { key: "communications", title: "Communications", desc: "Cross-tenant announcement and notification oversight", icon: <BellOutlined /> },
-          { key: "modules", title: "ERP Modules", desc: "Institution, finance, HR, comms, library, transport", icon: <AppstoreOutlined /> },
           { key: "students", title: "Students", desc: "Search and view student records", icon: <UserOutlined /> },
           { key: "academics", title: "Academics", desc: "Courses and class schedules", icon: <BookOutlined /> },
         ];

@@ -26,7 +26,10 @@ import {
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useEffect, useMemo, useState } from "react";
+import { useGetCoursesQuery } from "@/features/academics/academicsApiSlice";
 import FileAssetUploader from "@/features/files/FileAssetUploader";
+import { useGetTermsQuery, useGetSectionsQuery } from "@/features/institutions/institutionsApiSlice";
+import { useGetStudentsQuery } from "@/features/students/studentsApiSlice";
 import { academicOperationsApi } from "@/features/academics/academicOperationsApi";
 import { formatDateTime, parseApiError, rowsOf } from "@/utils/platform";
 
@@ -174,24 +177,16 @@ export default function AcademicWorkflowCenter() {
   const [gradeTarget, setGradeTarget] = useState<Submission | null>(null);
   const [extendTarget, setExtendTarget] = useState<Assignment | null>(null);
   const [activeTab, setActiveTab] = useState("calendar");
+  const studentsQuery = useGetStudentsQuery({ page: 1, page_size: 200 });
+  const termsQuery = useGetTermsQuery({ page: 1, page_size: 100 });
+  const sectionsQuery = useGetSectionsQuery({ page: 1, page_size: 200 });
+  const coursesQuery = useGetCoursesQuery({ page: 1, page_size: 200 });
 
   const loadAll = async () => {
     setLoading(true);
     try {
-      const {
-        studentData,
-        termData,
-        sectionData,
-        courseData,
-        eventData,
-        assignmentData,
-        submissionData,
-      } = await academicOperationsApi.workflow.load();
+      const { eventData, assignmentData, submissionData } = await academicOperationsApi.workflow.load();
 
-      setStudents(rowsOf(studentData) as Student[]);
-      setTerms(rowsOf(termData) as Term[]);
-      setSections(rowsOf(sectionData) as Section[]);
-      setCourses(rowsOf(courseData) as Course[]);
       setEvents(rowsOf(eventData) as CalendarEvent[]);
       const nextAssignments = rowsOf(assignmentData) as Assignment[];
       setAssignments(nextAssignments);
@@ -212,6 +207,29 @@ export default function AcademicWorkflowCenter() {
   useEffect(() => {
     void loadAll();
   }, []);
+
+  useEffect(() => {
+    setStudents(rowsOf(studentsQuery.data) as Student[]);
+  }, [studentsQuery.data]);
+
+  useEffect(() => {
+    setTerms(rowsOf(termsQuery.data) as Term[]);
+  }, [termsQuery.data]);
+
+  useEffect(() => {
+    setSections(rowsOf(sectionsQuery.data) as Section[]);
+  }, [sectionsQuery.data]);
+
+  useEffect(() => {
+    setCourses(rowsOf(coursesQuery.data) as Course[]);
+  }, [coursesQuery.data]);
+
+  const workspaceLoading =
+    loading ||
+    studentsQuery.isFetching ||
+    termsQuery.isFetching ||
+    sectionsQuery.isFetching ||
+    coursesQuery.isFetching;
 
   const studentMap = useMemo(
     () =>
@@ -536,8 +554,16 @@ export default function AcademicWorkflowCenter() {
         </div>
         <Button
           icon={<ReloadOutlined />}
-          onClick={() => void loadAll()}
-          loading={loading}
+          onClick={() => {
+            void Promise.all([
+              loadAll(),
+              studentsQuery.refetch(),
+              termsQuery.refetch(),
+              sectionsQuery.refetch(),
+              coursesQuery.refetch(),
+            ]);
+          }}
+          loading={workspaceLoading}
         >
           Refresh
         </Button>
@@ -738,7 +764,7 @@ export default function AcademicWorkflowCenter() {
                   </div>
                   <Table
                     rowKey="id"
-                    loading={loading}
+                    loading={workspaceLoading}
                     dataSource={events}
                     columns={calendarColumns}
                     pagination={{ pageSize: 6 }}
@@ -895,7 +921,7 @@ export default function AcademicWorkflowCenter() {
                   </div>
                   <Table
                     rowKey="id"
-                    loading={loading}
+                    loading={workspaceLoading}
                     dataSource={assignments}
                     columns={assignmentColumns}
                     pagination={{ pageSize: 6 }}
@@ -1092,7 +1118,7 @@ export default function AcademicWorkflowCenter() {
                     ) : null}
                     <Table
                       rowKey="id"
-                      loading={loading}
+                      loading={workspaceLoading}
                       dataSource={visibleSubmissions}
                       columns={submissionColumns}
                       pagination={{ pageSize: 6 }}

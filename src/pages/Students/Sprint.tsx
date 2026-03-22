@@ -1,6 +1,6 @@
 import { Tabs } from "antd";
-import StudentsCore from "@/pages/Students";
 import StudentDocumentCenter from "@/features/students/StudentDocumentCenter";
+import StudentsCore from "./index";
 
 export default function StudentsSprintPage() {
   return (

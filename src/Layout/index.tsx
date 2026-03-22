@@ -1,14 +1,17 @@
 import { Layout, Menu } from "antd";
 import {
+  BankOutlined,
   AuditOutlined,
   AppstoreOutlined,
   BellOutlined,
   BookOutlined,
+  CarOutlined,
   DatabaseOutlined,
   DashboardOutlined,
   DollarOutlined,
-  TeamOutlined,
   LogoutOutlined,
+  ReadOutlined,
+  TeamOutlined,
   UserOutlined,
 } from "@ant-design/icons";
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
@@ -31,6 +34,9 @@ export default function AppLayout() {
   }, []);
 
   const selectedKey = useMemo(() => {
+    if (location.pathname.startsWith("/transport")) return "transport";
+    if (location.pathname.startsWith("/library")) return "library";
+    if (location.pathname.startsWith("/institutions")) return "institutions";
     if (location.pathname.startsWith("/modules")) return "modules";
     if (location.pathname.startsWith("/students")) return "students";
     if (location.pathname.startsWith("/hr")) return "hr";
@@ -56,12 +62,37 @@ export default function AppLayout() {
       case "HR_MANAGER":
         return ["dashboard", "hr", "communications", "modules"] as const;
       case "LIBRARIAN":
+        return ["dashboard", "communications", "library"] as const;
       case "TRANSPORT_COORDINATOR":
-        return ["dashboard", "communications", "modules"] as const;
+        return ["dashboard", "communications", "transport"] as const;
       case "SCHOOL_ADMIN":
-        return ["dashboard", "students", "database", "academics", "finance", "hr", "communications", "admin", "modules"] as const;
+        return [
+          "dashboard",
+          "institutions",
+          "students",
+          "database",
+          "academics",
+          "finance",
+          "hr",
+          "library",
+          "transport",
+          "communications",
+          "admin",
+          "modules",
+        ] as const;
       case "SUPER_ADMIN":
-        return ["dashboard", "students", "finance", "hr", "communications", "admin", "modules"] as const;
+        return [
+          "dashboard",
+          "institutions",
+          "students",
+          "finance",
+          "hr",
+          "library",
+          "transport",
+          "communications",
+          "admin",
+          "modules",
+        ] as const;
       default:
         return ["dashboard", "students", "academics", "communications"] as const;
     }
@@ -76,8 +107,9 @@ export default function AppLayout() {
       case "HR_MANAGER":
         return "/hr";
       case "LIBRARIAN":
+        return "/library";
       case "TRANSPORT_COORDINATOR":
-        return "/modules";
+        return "/transport";
       case "SUPER_ADMIN":
         return "/admin";
       default:
@@ -94,11 +126,14 @@ export default function AppLayout() {
   const menuItems = useMemo(() => {
     const base: Array<{ key: string; icon: ReactNode; label: string }> = [
       { key: "dashboard", icon: <DashboardOutlined />, label: "Dashboard" },
+      { key: "institutions", icon: <BankOutlined />, label: "Institutions" },
       { key: "students", icon: <UserOutlined />, label: "Students" },
       { key: "database", icon: <DatabaseOutlined />, label: "Admissions" },
       { key: "academics", icon: <BookOutlined />, label: "Academics" },
       { key: "finance", icon: <DollarOutlined />, label: "Finance" },
       { key: "hr", icon: <TeamOutlined />, label: "HR" },
+      { key: "library", icon: <ReadOutlined />, label: "Library" },
+      { key: "transport", icon: <CarOutlined />, label: "Transport" },
       { key: "communications", icon: <BellOutlined />, label: "Communications" },
       { key: "modules", icon: <AppstoreOutlined />, label: "ERP Modules" },
       { key: "admin", icon: <AuditOutlined />, label: "Admin" },

@@ -7,9 +7,9 @@ import AdminAnalyticsWidget from "./AdminAnalyticsWidget";
 import { TiltCard } from "./TiltCard";
 import { getTenantRole, useDashboardActions, type ModuleKey } from "./utils";
 
-const Students = lazy(() => import("@/pages/StudentsSprint"));
+const Students = lazy(() => import("@/pages/Students/Sprint"));
 const Admissions = lazy(() => import("@/pages/Database"));
-const Academics = lazy(() => import("@/pages/AcademicsSprint"));
+const Academics = lazy(() => import("@/pages/Academics/Sprint"));
 
 type QuickLink = {
   key: string;
@@ -29,13 +29,15 @@ const DashboardHome: FC = () => {
     role === "TEACHER"
       ? "academics"
       : role === "SUPER_ADMIN"
-        ? "admin"
+        ? "institutions"
         : role === "ACCOUNTANT"
           ? "finance"
           : role === "HR_MANAGER"
             ? "hr"
-            : role === "LIBRARIAN" || role === "TRANSPORT_COORDINATOR"
-              ? "modules"
+            : role === "LIBRARIAN"
+              ? "library"
+              : role === "TRANSPORT_COORDINATOR"
+                ? "transport"
               : "students";
               
   const module = (params.get("module") as ModuleKey | null) ?? defaultModule;
@@ -57,22 +59,23 @@ const DashboardHome: FC = () => {
         ];
       case "LIBRARIAN":
         return [
-          { key: "library-reports", label: "Library Reports", description: "Overdue reports, analytics, and late-fee runs", path: "/modules?module=library" },
+          { key: "library-reports", label: "Library Reports", description: "Overdue reports, analytics, and late-fee runs", path: "/library?tab=reports" },
           { key: "library-campaigns", label: "Campaigns", description: "Send overdue and membership communication batches", path: "/communications?tab=campaigns" },
         ];
       case "TRANSPORT_COORDINATOR":
         return [
-          { key: "transport-reports", label: "Transport Reports", description: "Occupancy, utilization, and cost-trend reporting", path: "/modules?module=transport" },
+          { key: "transport-reports", label: "Transport Reports", description: "Occupancy, utilization, and cost-trend reporting", path: "/transport?tab=reports" },
           { key: "transport-campaigns", label: "Campaigns", description: "Open dispatch communications for route updates", path: "/communications?tab=campaigns" },
         ];
       case "SUPER_ADMIN":
       case "SCHOOL_ADMIN":
         return [
+          { key: "admin-institutions", label: "Institutions", description: "Open tenancy, plans, and academic setup in the new workspace", path: "/institutions?tab=tenancy" },
           { key: "admin-risk", label: "Attendance Risk", description: "Monitor at-risk learners from the academics workspace", path: "/academics?scope=advanced&tab=attendance-risk" },
           { key: "admin-lifecycle", label: "HR Lifecycle", description: "Jump directly into staff onboarding and offboarding controls", path: "/hr?scope=advanced&tab=lifecycle" },
           { key: "admin-campaigns", label: "Campaigns", description: "Run scheduled or immediate bulk messaging", path: "/communications?tab=campaigns" },
-          { key: "admin-library", label: "Library Reports", description: "Open library overdue and analytics reporting", path: "/modules?module=library" },
-          { key: "admin-transport", label: "Transport Reports", description: "Open transport occupancy and cost analytics", path: "/modules?module=transport" },
+          { key: "admin-library", label: "Library Reports", description: "Open library overdue and analytics reporting", path: "/library?tab=reports" },
+          { key: "admin-transport", label: "Transport Reports", description: "Open transport occupancy and cost analytics", path: "/transport?tab=reports" },
         ];
       case "ACCOUNTANT":
         return [
@@ -95,16 +98,16 @@ const DashboardHome: FC = () => {
       navigate("/hr?scope=advanced&tab=lifecycle");
       return;
     }
-    if (role === "LIBRARIAN" && key === "modules") {
-      navigate("/modules?module=library");
+    if (role === "LIBRARIAN" && key === "library") {
+      navigate("/library");
       return;
     }
-    if (role === "TRANSPORT_COORDINATOR" && key === "modules") {
-      navigate("/modules?module=transport");
+    if (role === "TRANSPORT_COORDINATOR" && key === "transport") {
+      navigate("/transport");
       return;
     }
 
-    if (["admin", "modules", "communications", "finance", "hr"].includes(key)) {
+    if (["admin", "modules", "communications", "finance", "hr", "institutions", "library", "transport"].includes(key)) {
       navigate(`/${key}`);
       return;
     }

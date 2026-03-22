@@ -7,16 +7,19 @@ import Login from "@/pages/Authentication/Login";
 import Register from "@/pages/Authentication/Register";
 import ForgotPassword from "@/pages/Authentication/ForgotPassword";
 import ResetPassword from "@/pages/Authentication/ResetPassword";
-import DashboardSprintPage from "@/pages/DashboardSprint";
+import DashboardSprintPage from "@/pages/Dashboard/Sprint";
 import Upload from "@/pages/Upload";
 import Database from "@/pages/Database";
-import AcademicsSprintPage from "@/pages/AcademicsSprint";
-import AdminSprintPage from "@/pages/AdminSprint";
+import AcademicsSprintPage from "@/pages/Academics/Sprint";
+import AdminSprintPage from "@/pages/Admin/Sprint";
 import Communications from "@/pages/Communications";
-import FinanceSprintPage from "@/pages/FinanceSprint";
-import HRSprintPage from "@/pages/HRSprint";
+import FinanceSprintPage from "@/pages/Finance/Sprint";
+import HRSprintPage from "@/pages/HR/Sprint";
+import Institutions from "@/pages/Institutions";
+import Library from "@/pages/Library";
 import Modules from "@/pages/Modules";
-import StudentsSprintPage from "@/pages/StudentsSprint";
+import StudentsSprintPage from "@/pages/Students/Sprint";
+import Transport from "@/pages/Transport";
 
 const AppRoutes = () => {
   const routes: RouteObject[] = [
@@ -70,6 +73,14 @@ const AppRoutes = () => {
           ),
         },
         {
+          path: "institutions",
+          element: (
+            <Suspense>
+              <Institutions />
+            </Suspense>
+          ),
+        },
+        {
           path: "admin",
           element: (
             <Suspense>
@@ -102,10 +113,26 @@ const AppRoutes = () => {
           ),
         },
         {
+          path: "library",
+          element: (
+            <Suspense>
+              <Library />
+            </Suspense>
+          ),
+        },
+        {
           path: "modules",
           element: (
             <Suspense>
               <Modules />
+            </Suspense>
+          ),
+        },
+        {
+          path: "transport",
+          element: (
+            <Suspense>
+              <Transport />
             </Suspense>
           ),
         },

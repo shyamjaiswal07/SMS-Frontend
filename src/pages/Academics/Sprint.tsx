@@ -1,7 +1,7 @@
 import { Tabs } from "antd";
 import { useSearchParams } from "react-router-dom";
-import AcademicsCore from "@/pages/Academics";
 import AcademicsAdvancedCenter from "@/features/academics/AcademicsAdvancedCenter";
+import AcademicsCore from "./index";
 
 export default function AcademicsSprintPage() {
   const [params, setParams] = useSearchParams();
