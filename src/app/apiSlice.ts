@@ -49,6 +49,7 @@ export const apiSlice = createApi({
     "AdminAudits",
     "RolePermissions",
     "Schools",
+    "Analytics",
     "AuthSecurity",
   ],
   endpoints: () => ({}),

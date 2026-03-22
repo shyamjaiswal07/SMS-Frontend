@@ -3,6 +3,7 @@ import type { RouteObject } from "react-router-dom";
 import { Navigate, useRoutes } from "react-router-dom";
 import ProtectedRoute from "./ProtectedRoute";
 import AppLayout from "@/Layout";
+import Analytics from "@/pages/Analytics";
 import Login from "@/pages/Authentication/Login";
 import Register from "@/pages/Authentication/Register";
 import ForgotPassword from "@/pages/Authentication/ForgotPassword";
@@ -69,6 +70,14 @@ const AppRoutes = () => {
           element: (
             <Suspense>
               <AcademicsSprintPage />
+            </Suspense>
+          ),
+        },
+        {
+          path: "analytics",
+          element: (
+            <Suspense>
+              <Analytics />
             </Suspense>
           ),
         },

@@ -3,6 +3,7 @@ import {
   BankOutlined,
   AuditOutlined,
   AppstoreOutlined,
+  BarChartOutlined,
   BellOutlined,
   BookOutlined,
   CarOutlined,
@@ -37,6 +38,7 @@ export default function AppLayout() {
     if (location.pathname.startsWith("/transport")) return "transport";
     if (location.pathname.startsWith("/library")) return "library";
     if (location.pathname.startsWith("/institutions")) return "institutions";
+    if (location.pathname.startsWith("/analytics")) return "analytics";
     if (location.pathname.startsWith("/modules")) return "modules";
     if (location.pathname.startsWith("/students")) return "students";
     if (location.pathname.startsWith("/hr")) return "hr";
@@ -56,18 +58,19 @@ export default function AppLayout() {
       case "PARENT":
         return ["dashboard", "students", "communications"] as const;
       case "TEACHER":
-        return ["dashboard", "students", "academics", "database", "communications", "modules"] as const;
+        return ["dashboard", "students", "academics", "database", "communications", "analytics", "modules"] as const;
       case "ACCOUNTANT":
-        return ["dashboard", "finance", "communications", "modules"] as const;
+        return ["dashboard", "finance", "communications", "analytics", "modules"] as const;
       case "HR_MANAGER":
-        return ["dashboard", "hr", "communications", "modules"] as const;
+        return ["dashboard", "hr", "communications", "analytics", "modules"] as const;
       case "LIBRARIAN":
-        return ["dashboard", "communications", "library"] as const;
+        return ["dashboard", "communications", "library", "analytics"] as const;
       case "TRANSPORT_COORDINATOR":
-        return ["dashboard", "communications", "transport"] as const;
+        return ["dashboard", "communications", "transport", "analytics"] as const;
       case "SCHOOL_ADMIN":
         return [
           "dashboard",
+          "analytics",
           "institutions",
           "students",
           "database",
@@ -83,6 +86,7 @@ export default function AppLayout() {
       case "SUPER_ADMIN":
         return [
           "dashboard",
+          "analytics",
           "institutions",
           "students",
           "finance",
@@ -126,6 +130,7 @@ export default function AppLayout() {
   const menuItems = useMemo(() => {
     const base: Array<{ key: string; icon: ReactNode; label: string }> = [
       { key: "dashboard", icon: <DashboardOutlined />, label: "Dashboard" },
+      { key: "analytics", icon: <BarChartOutlined />, label: "Analytics" },
       { key: "institutions", icon: <BankOutlined />, label: "Institutions" },
       { key: "students", icon: <UserOutlined />, label: "Students" },
       { key: "database", icon: <DatabaseOutlined />, label: "Admissions" },

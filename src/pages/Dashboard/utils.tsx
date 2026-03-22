@@ -3,6 +3,7 @@ import {
   AppstoreOutlined,
   AuditOutlined,
   BankOutlined,
+  BarChartOutlined,
   BellOutlined,
   BookOutlined,
   CarOutlined,
@@ -13,6 +14,7 @@ import {
 } from "@ant-design/icons";
 
 export type ModuleKey =
+  | "analytics"
   | "institutions"
   | "students"
   | "academics"
@@ -58,6 +60,7 @@ export function useDashboardActions(role: string | undefined): ActionCard[] {
         ];
       case "TEACHER":
         return [
+          { key: "analytics", title: "Analytics", desc: "Role-aware KPI blocks across academics and communications", icon: <BarChartOutlined /> },
           { key: "academics", title: "Teaching Planner", desc: "Courses, prerequisites & schedules", icon: <BookOutlined /> },
           { key: "students", title: "Students Overview", desc: "Student summaries & details", icon: <UserOutlined /> },
           { key: "admissions", title: "Admissions", desc: "Review applications", icon: <AppstoreOutlined /> },
@@ -66,28 +69,33 @@ export function useDashboardActions(role: string | undefined): ActionCard[] {
         ];
       case "ACCOUNTANT":
         return [
+          { key: "analytics", title: "Analytics", desc: "Finance and communications KPI overview", icon: <BarChartOutlined /> },
           { key: "finance", title: "Finance", desc: "Invoices, payments, and fee setup", icon: <DollarOutlined /> },
           { key: "communications", title: "Communications", desc: "Notifications and shared operational messaging", icon: <BellOutlined /> },
           { key: "modules", title: "ERP Modules", desc: "Operational APIs for your assigned domain", icon: <AppstoreOutlined /> },
         ];
       case "HR_MANAGER":
         return [
+          { key: "analytics", title: "Analytics", desc: "HR and communications KPI overview", icon: <BarChartOutlined /> },
           { key: "hr", title: "HR", desc: "Staff profiles, leave, payroll runs, and payslips", icon: <TeamOutlined /> },
           { key: "communications", title: "Communications", desc: "Notifications and shared operational messaging", icon: <BellOutlined /> },
           { key: "modules", title: "ERP Modules", desc: "Extended HR and ERP API coverage", icon: <AppstoreOutlined /> },
         ];
       case "LIBRARIAN":
         return [
+          { key: "analytics", title: "Analytics", desc: "Role-aware library and communications KPI blocks", icon: <BarChartOutlined /> },
           { key: "communications", title: "Communications", desc: "Notifications and shared operational messaging", icon: <BellOutlined /> },
           { key: "library", title: "Library", desc: "Catalog, circulation, and reporting in the dedicated module", icon: <ReadOutlined /> },
         ];
       case "TRANSPORT_COORDINATOR":
         return [
+          { key: "analytics", title: "Analytics", desc: "Role-aware transport and communications KPI blocks", icon: <BarChartOutlined /> },
           { key: "communications", title: "Communications", desc: "Notifications and shared operational messaging", icon: <BellOutlined /> },
           { key: "transport", title: "Transport", desc: "Routes, allocations, and reporting in the dedicated module", icon: <CarOutlined /> },
         ];
       case "SCHOOL_ADMIN":
         return [
+          { key: "analytics", title: "Analytics", desc: "Cross-module KPI monitoring for school operations", icon: <BarChartOutlined /> },
           { key: "institutions", title: "Institutions", desc: "Tenancy, academic setup, and facilities", icon: <BankOutlined /> },
           { key: "students", title: "Students", desc: "Search and view student records", icon: <UserOutlined /> },
           { key: "admissions", title: "Admissions", desc: "Manage admission applications", icon: <AppstoreOutlined /> },
@@ -99,6 +107,7 @@ export function useDashboardActions(role: string | undefined): ActionCard[] {
         ];
       case "SUPER_ADMIN":
         return [
+          { key: "analytics", title: "Analytics", desc: "Cross-tenant KPI monitoring for platform operations", icon: <BarChartOutlined /> },
           { key: "institutions", title: "Institutions", desc: "School tenancy, subscriptions, and setup records", icon: <BankOutlined /> },
           { key: "admin", title: "Admin Controls", desc: "Users, permissions, memberships and security", icon: <AuditOutlined /> },
           { key: "finance", title: "Finance", desc: "Fee structures, invoices, collections, and summaries", icon: <DollarOutlined /> },

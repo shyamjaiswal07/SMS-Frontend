@@ -1,69 +1,77 @@
-import React from 'react';
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { Typography } from 'antd';
-
-const data = [
-  { name: 'Sep', admissions: 400, inquiries: 800 },
-  { name: 'Oct', admissions: 300, inquiries: 700 },
-  { name: 'Nov', admissions: 500, inquiries: 900 },
-  { name: 'Dec', admissions: 200, inquiries: 500 },
-  { name: 'Jan', admissions: 600, inquiries: 1200 },
-  { name: 'Feb', admissions: 750, inquiries: 1400 },
-];
+import { ArrowRightOutlined } from "@ant-design/icons";
+import { Button, Card, Col, Row, Typography } from "antd";
+import { useMemo } from "react";
+import { useNavigate } from "react-router-dom";
+import { analyticsModuleConfigs, moduleMetrics, roleVisibleAnalyticsModules } from "@/features/analytics/analyticsConfig";
+import { useGetAnalyticsOverviewQuery } from "@/features/analytics/analyticsApiSlice";
+import { analyticsMetricLabel, analyticsMetricValue, analyticsPreviewRows } from "@/features/analytics/analyticsUtils";
+import { currentTenant } from "@/utils/platform";
 
 export default function AdminAnalyticsWidget() {
+  const navigate = useNavigate();
+  const tenant = currentTenant();
+  const { data, isFetching } = useGetAnalyticsOverviewQuery();
+
+  const visibleModules = useMemo(() => {
+    const visible = new Set(roleVisibleAnalyticsModules(tenant?.role));
+    return analyticsModuleConfigs.filter((item) => visible.has(item.key)).slice(0, 3);
+  }, [tenant?.role]);
+
   return (
-    <div className="w-full bg-[var(--cv-card)]/40 border border-white/10 rounded-[2.5rem] p-6 md:p-8 shadow-2xl backdrop-blur-3xl relative overflow-hidden group hover:border-white/20 transition-all duration-500">
-      <div className="absolute inset-0 bg-gradient-to-br from-[var(--cv-accent)]/10 to-transparent pointer-events-none" />
-      
-      <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-8">
+    <Card className="!bg-[var(--cv-card)] !border-white/10 !rounded-[2.5rem]">
+      <div className="flex items-start justify-between gap-4 flex-wrap mb-6">
         <div>
-          <Typography.Title level={4} className="!mb-1 !text-white font-bold tracking-wide">
-            Enrollment Trends
+          <Typography.Title level={4} className="!mb-1 !text-white">
+            Analytics Snapshot
           </Typography.Title>
-          <Typography.Text className="!text-white/50 text-sm">
-            Admissions vs Inquiries over the last 6 months
-          </Typography.Text>
+          <Typography.Paragraph className="!mb-0 !text-white/55">
+            Real KPI blocks for {tenant?.name ?? "current tenant"} from the unified analytics service.
+          </Typography.Paragraph>
         </div>
-        <div className="flex gap-4 bg-white/5 px-4 py-2 rounded-2xl border border-white/10 max-w-min">
-          <div className="flex items-center gap-2 whitespace-nowrap">
-            <div className="w-2.5 h-2.5 rounded-full bg-[var(--cv-accent)] shadow-[0_0_8px_var(--cv-accent)]" />
-            <span className="text-white/70 text-xs font-medium uppercase tracking-wider">Admissions</span>
-          </div>
-          <div className="flex items-center gap-2 whitespace-nowrap">
-            <div className="w-2.5 h-2.5 rounded-full bg-purple-500 shadow-[0_0_8px_#a855f7]" />
-            <span className="text-white/70 text-xs font-medium uppercase tracking-wider">Inquiries</span>
-          </div>
-        </div>
+        <Button type="primary" className="!rounded-2xl !bg-[var(--cv-accent)] !border-0" onClick={() => navigate("/analytics")}>
+          Open Analytics <ArrowRightOutlined />
+        </Button>
       </div>
 
-      <div className="relative z-10 w-full h-[300px]">
-        <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={data} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-            <defs>
-              <linearGradient id="colorAdmissions" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="var(--cv-accent)" stopOpacity={0.8}/>
-                <stop offset="95%" stopColor="var(--cv-accent)" stopOpacity={0}/>
-              </linearGradient>
-              <linearGradient id="colorInquiries" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#a855f7" stopOpacity={0.6}/>
-                <stop offset="95%" stopColor="#a855f7" stopOpacity={0}/>
-              </linearGradient>
-            </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
-            <XAxis dataKey="name" stroke="rgba(255,255,255,0.3)" tick={{ fill: 'rgba(255,255,255,0.5)', fontSize: 12, fontWeight: 500 }} axisLine={false} tickLine={false} dy={10} />
-            <YAxis stroke="rgba(255,255,255,0.3)" tick={{ fill: 'rgba(255,255,255,0.5)', fontSize: 12, fontWeight: 500 }} axisLine={false} tickLine={false} />
-            <Tooltip 
-              contentStyle={{ backgroundColor: 'rgba(15,15,15,0.95)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '1.25rem', backdropFilter: 'blur(10px)', color: '#fff', boxShadow: '0 10px 30px rgba(0,0,0,0.5)' }}
-              itemStyle={{ color: '#fff', fontWeight: 600, fontSize: '0.9rem' }}
-              labelStyle={{ color: 'rgba(255,255,255,0.5)', fontWeight: 600, fontSize: '0.8rem', paddingBottom: '0.5rem', borderBottom: '1px solid rgba(255,255,255,0.1)', marginBottom: '0.5rem' }}
-              cursor={{ stroke: 'rgba(255,255,255,0.1)', strokeWidth: 2, strokeDasharray: '5 5' }}
-            />
-            <Area type="monotone" dataKey="inquiries" stroke="#a855f7" strokeWidth={3} fillOpacity={1} fill="url(#colorInquiries)" animationDuration={1500} />
-            <Area type="monotone" dataKey="admissions" stroke="var(--cv-accent)" strokeWidth={3} fillOpacity={1} fill="url(#colorAdmissions)" animationDuration={1500} />
-          </AreaChart>
-        </ResponsiveContainer>
-      </div>
-    </div>
+      <Row gutter={[16, 16]}>
+        {visibleModules.map((module) => {
+          const metrics = moduleMetrics(data ?? {}, module.key);
+          const previewRows = analyticsPreviewRows(metrics, 3);
+
+          return (
+            <Col xs={24} md={12} xl={8} key={module.key}>
+              <div className="rounded-3xl border border-white/10 bg-white/5 p-5 h-full">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="h-10 w-10 rounded-2xl bg-[var(--cv-accent)]/15 border border-[var(--cv-accent)]/20 grid place-items-center text-[var(--cv-accent)]">
+                    {module.icon}
+                  </div>
+                  <div>
+                    <div className="text-white font-semibold">{module.title}</div>
+                    <div className="text-white/45 text-xs">
+                      {isFetching
+                        ? "Refreshing..."
+                        : `${data?.period?.start_date || "-"} to ${data?.period?.end_date || "-"}`}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  {previewRows.length ? (
+                    previewRows.map(([key, value]) => (
+                      <div key={key} className="flex items-center justify-between gap-3 text-sm">
+                        <span className="text-white/55">{analyticsMetricLabel(key)}</span>
+                        <span className="text-white/85">{analyticsMetricValue(value)}</span>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="text-white/45 text-sm">No metrics available.</div>
+                  )}
+                </div>
+              </div>
+            </Col>
+          );
+        })}
+      </Row>
+    </Card>
   );
 }

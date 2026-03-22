@@ -47,29 +47,34 @@ const DashboardHome: FC = () => {
     switch (role) {
       case "TEACHER":
         return [
+          { key: "teacher-analytics", label: "Analytics", description: "Open role-aware module KPIs for your current tenant", path: "/analytics" },
           { key: "teacher-workflow", label: "Assignment Workflow", description: "Calendar, publishing, submissions, and grading actions", path: "/academics?scope=advanced&tab=workflow" },
           { key: "teacher-risk", label: "Attendance Risk", description: "Review flagged attendance cases before escalation", path: "/academics?scope=advanced&tab=attendance-risk" },
           { key: "teacher-campaigns", label: "Campaigns", description: "Open bulk communications for parent and student outreach", path: "/communications?tab=campaigns" },
         ];
       case "HR_MANAGER":
         return [
+          { key: "hr-analytics", label: "Analytics", description: "Review HR and communication KPI blocks", path: "/analytics" },
           { key: "hr-lifecycle", label: "Lifecycle Board", description: "Onboarding, offboarding, and checklist status transitions", path: "/hr?scope=advanced&tab=lifecycle" },
           { key: "hr-payroll", label: "Payroll Documents", description: "Payslips, tax documents, and payroll output review", path: "/hr?scope=advanced&tab=payroll" },
           { key: "hr-campaigns", label: "Campaigns", description: "Queue HR notices with immediate or scheduled delivery", path: "/communications?tab=campaigns" },
         ];
       case "LIBRARIAN":
         return [
+          { key: "library-analytics", label: "Analytics", description: "Open role-aware library and communications KPI blocks", path: "/analytics" },
           { key: "library-reports", label: "Library Reports", description: "Overdue reports, analytics, and late-fee runs", path: "/library?tab=reports" },
           { key: "library-campaigns", label: "Campaigns", description: "Send overdue and membership communication batches", path: "/communications?tab=campaigns" },
         ];
       case "TRANSPORT_COORDINATOR":
         return [
+          { key: "transport-analytics", label: "Analytics", description: "Open role-aware transport and communications KPI blocks", path: "/analytics" },
           { key: "transport-reports", label: "Transport Reports", description: "Occupancy, utilization, and cost-trend reporting", path: "/transport?tab=reports" },
           { key: "transport-campaigns", label: "Campaigns", description: "Open dispatch communications for route updates", path: "/communications?tab=campaigns" },
         ];
       case "SUPER_ADMIN":
       case "SCHOOL_ADMIN":
         return [
+          { key: "admin-analytics", label: "Analytics", description: "Open the dedicated unified analytics workspace", path: "/analytics" },
           { key: "admin-institutions", label: "Institutions", description: "Open tenancy, plans, and academic setup in the new workspace", path: "/institutions?tab=tenancy" },
           { key: "admin-risk", label: "Attendance Risk", description: "Monitor at-risk learners from the academics workspace", path: "/academics?scope=advanced&tab=attendance-risk" },
           { key: "admin-lifecycle", label: "HR Lifecycle", description: "Jump directly into staff onboarding and offboarding controls", path: "/hr?scope=advanced&tab=lifecycle" },
@@ -79,6 +84,7 @@ const DashboardHome: FC = () => {
         ];
       case "ACCOUNTANT":
         return [
+          { key: "finance-analytics", label: "Analytics", description: "Open finance and communications KPI blocks", path: "/analytics" },
           { key: "finance-home", label: "Finance Workspace", description: "Open invoicing, statements, and budget workflows", path: "/finance" },
           { key: "finance-campaigns", label: "Campaigns", description: "Queue collection reminders or scheduled finance broadcasts", path: "/communications?tab=campaigns" },
         ];
@@ -107,7 +113,7 @@ const DashboardHome: FC = () => {
       return;
     }
 
-    if (["admin", "modules", "communications", "finance", "hr", "institutions", "library", "transport"].includes(key)) {
+    if (["admin", "analytics", "modules", "communications", "finance", "hr", "institutions", "library", "transport"].includes(key)) {
       navigate(`/${key}`);
       return;
     }
