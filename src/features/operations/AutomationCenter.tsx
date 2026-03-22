@@ -1,8 +1,9 @@
 import { PlayCircleOutlined, SettingOutlined, ThunderboltOutlined } from "@ant-design/icons";
 import { Button, Card, Col, Form, InputNumber, Row, Space, Statistic, Typography, message } from "antd";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { operationsApi } from "@/features/operations/operationsApi";
-import { currentTenant, parseApiError } from "@/utils/platform";
+import { currentTenant, parseApiError, rowsOf } from "@/utils/platform";
 
 type WorkerHealth = {
   status?: string;
@@ -10,6 +11,14 @@ type WorkerHealth = {
   workers_online?: number;
   workers?: string[];
   unresolved_failures?: number;
+};
+
+type ReadinessWarning = {
+  key: string;
+  title: string;
+  detail: string;
+  actionLabel: string;
+  actionPath: string;
 };
 
 type AutomationSettingsForm = {
@@ -35,8 +44,16 @@ const defaultValues: AutomationSettingsForm = {
 };
 
 export default function AutomationCenter() {
+  const navigate = useNavigate();
   const tenant = currentTenant();
   const [health, setHealth] = useState<WorkerHealth | null>(null);
+  const [readinessCounts, setReadinessCounts] = useState({
+    academicYears: 0,
+    terms: 0,
+    feeCategories: 0,
+    feeStructures: 0,
+    notificationTemplates: 0,
+  });
   const [loading, setLoading] = useState(false);
   const [runningTask, setRunningTask] = useState<string | null>(null);
   const [form] = Form.useForm<AutomationSettingsForm>();
@@ -45,9 +62,24 @@ export default function AutomationCenter() {
     if (!tenant?.id) return;
     setLoading(true);
     try {
-      const { healthData, schoolData } = await operationsApi.automation.load(tenant.id);
+      const {
+        healthData,
+        schoolData,
+        academicYearData,
+        termData,
+        feeCategoryData,
+        feeStructureData,
+        notificationTemplateData,
+      } = await operationsApi.automation.load(tenant.id);
 
       setHealth(healthData as WorkerHealth);
+      setReadinessCounts({
+        academicYears: rowsOf(academicYearData).length,
+        terms: rowsOf(termData).length,
+        feeCategories: rowsOf(feeCategoryData).length,
+        feeStructures: rowsOf(feeStructureData).length,
+        notificationTemplates: rowsOf(notificationTemplateData).length,
+      });
       const settings = ((schoolData as { settings_json?: Record<string, number> }).settings_json) ?? {};
       form.setFieldsValue({
         payment_reminder_days_before: Number(settings.payment_reminder_days_before ?? defaultValues.payment_reminder_days_before),
@@ -70,6 +102,62 @@ export default function AutomationCenter() {
     void loadAll();
   }, []);
 
+  const readinessWarnings = useMemo<ReadinessWarning[]>(() => {
+    const warnings: ReadinessWarning[] = [];
+
+    if (readinessCounts.academicYears === 0) {
+      warnings.push({
+        key: "academic-years",
+        title: "Academic year setup is missing",
+        detail: "Create at least one academic year so fee automation, admissions, and portal timelines have a calendar anchor.",
+        actionLabel: "Open Academic Setup",
+        actionPath: "/institutions?tab=academics",
+      });
+    }
+
+    if (readinessCounts.academicYears > 0 && readinessCounts.terms === 0) {
+      warnings.push({
+        key: "terms",
+        title: "Terms are not configured",
+        detail: "Your academic year exists, but no terms are available for fee cycles, scheduling, or report generation.",
+        actionLabel: "Configure Terms",
+        actionPath: "/institutions?tab=academics",
+      });
+    }
+
+    if (readinessCounts.feeCategories === 0) {
+      warnings.push({
+        key: "fee-categories",
+        title: "Fee categories are missing",
+        detail: "Add billing heads before finance teams can structure recurring and term-based charges.",
+        actionLabel: "Open Finance Setup",
+        actionPath: "/finance",
+      });
+    }
+
+    if (readinessCounts.feeStructures === 0) {
+      warnings.push({
+        key: "fee-structures",
+        title: "Fee structures are not ready",
+        detail: "Automated invoice generation cannot run until each grade has a fee structure for the active year.",
+        actionLabel: "Review Finance Workspace",
+        actionPath: "/finance",
+      });
+    }
+
+    if (readinessCounts.notificationTemplates === 0) {
+      warnings.push({
+        key: "notification-templates",
+        title: "Notification templates are empty",
+        detail: "Alerts can still send, but reusable fee and attendance templates are not configured yet.",
+        actionLabel: "Open Communications",
+        actionPath: "/communications?tab=notifications",
+      });
+    }
+
+    return warnings;
+  }, [readinessCounts]);
+
   return (
     <div className="space-y-4">
       <div className="flex items-start justify-between gap-4 flex-wrap">
@@ -85,6 +173,42 @@ export default function AutomationCenter() {
           Refresh
         </Button>
       </div>
+
+      <Card className="!bg-[var(--cv-card)] !border-white/10 !rounded-3xl">
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div>
+            <Typography.Title level={5} className="!mb-1 !text-white">
+              Sprint 14 Readiness Warnings
+            </Typography.Title>
+            <Typography.Paragraph className="!mb-0 !text-white/60">
+              Actionable frontend alerts for the backend automation features that depend on tenant configuration.
+            </Typography.Paragraph>
+          </div>
+          <div className="rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white/60">
+            Academic years: <span className="text-white/85">{readinessCounts.academicYears}</span>
+            <br />
+            Fee structures: <span className="text-white/85">{readinessCounts.feeStructures}</span>
+          </div>
+        </div>
+
+        {readinessWarnings.length ? (
+          <div className="mt-4 grid gap-3 xl:grid-cols-2">
+            {readinessWarnings.map((warning) => (
+              <div key={warning.key} className="rounded-3xl border border-amber-400/20 bg-amber-400/10 p-5">
+                <div className="text-white font-medium">{warning.title}</div>
+                <div className="mt-2 text-sm text-white/70">{warning.detail}</div>
+                <Button className="!mt-4 !rounded-2xl" onClick={() => navigate(warning.actionPath)}>
+                  {warning.actionLabel}
+                </Button>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="mt-4 rounded-3xl border border-emerald-400/20 bg-emerald-400/10 p-5 text-white/80">
+            Core automation prerequisites look healthy for this tenant. You can keep tuning thresholds or run jobs manually below.
+          </div>
+        )}
+      </Card>
 
       <Row gutter={[16, 16]}>
         <Col xs={24} md={8}>

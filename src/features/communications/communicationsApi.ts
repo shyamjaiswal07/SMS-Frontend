@@ -52,6 +52,12 @@ export const communicationsApi = {
   createNotification(payload: Record<string, unknown>) {
     return post("/api/communications/notifications/", payload);
   },
+  loadMyPreferences() {
+    return get("/api/communications/notification-preferences/me/");
+  },
+  updateMyPreferences(payload: Record<string, unknown>) {
+    return apiClient.patch("/api/communications/notification-preferences/me/", payload).then((result) => result.data);
+  },
   async loadBulkCampaigns() {
     return get("/api/communications/bulk-campaigns/", { page: 1, page_size: 200 });
   },

@@ -4,6 +4,7 @@ import type { ColumnsType } from "antd/es/table";
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import BulkCampaignCenter from "@/features/communications/BulkCampaignCenter";
+import NotificationPreferencesPanel from "@/features/communications/NotificationPreferencesPanel";
 import { communicationsApi } from "@/features/communications/communicationsApi";
 import { useGetAdminUsersQuery } from "@/features/admin/adminApiSlice";
 import { rowsOf } from "@/utils/platform";
@@ -468,6 +469,11 @@ export default function CommunicationsPage() {
                 </Card>
               </div>
             ),
+          },
+          {
+            key: "preferences",
+            label: "Preferences",
+            children: <NotificationPreferencesPanel unreadByChannel={unread.by_channel} />,
           },
         ]}
       />

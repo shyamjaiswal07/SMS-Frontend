@@ -26,19 +26,20 @@ export default function ResetPassword() {
     <div className="min-h-screen flex items-center justify-center bg-[var(--cv-bg)] p-4">
       <Card className="w-full max-w-xl rounded-3xl border border-white/10 !bg-white/5 backdrop-blur-xl shadow-[0_0_0_1px_rgba(255,255,255,0.06)]">
         <Typography.Title level={3} className="!mb-1 !text-white">
-          Reset password
+          Set password
         </Typography.Title>
         <Typography.Paragraph className="!mb-6 !text-white/60">
-          Set a new strong password. This reset token is single-use and old sessions become invalid after success.
+          Use this secure link to activate your account or reset access with a new strong password. This token is
+          single-use and older sessions become invalid after success.
         </Typography.Paragraph>
 
         {!hasResetContext ? (
           <div className="space-y-4">
             <div className="rounded-2xl border border-red-400/20 bg-red-400/10 p-4 text-sm text-red-200">
-              Reset link details are missing. Open this page from the email link or include `uid` and `token` in the URL.
+              Link details are missing. Open this page from the email invitation or include `uid` and `token` in the URL.
             </div>
             <Button type="link" className="px-0" onClick={() => navigate("/forgot-password")}>
-              <ArrowLeftOutlined /> Back to forgot password
+              <ArrowLeftOutlined /> Back to access help
             </Button>
           </div>
         ) : (
@@ -54,10 +55,10 @@ export default function ResetPassword() {
                   token,
                   new_password: values.newPassword,
                 });
-                message.success("Password reset successful. Please sign in with your new password.");
+                message.success("Password set successfully. You can now sign in.");
                 navigate("/login", { replace: true });
               } catch (error) {
-                message.error(parseApiError(error, "Unable to reset password"));
+                message.error(parseApiError(error, "Unable to set password"));
               } finally {
                 setSubmitting(false);
               }
@@ -112,7 +113,7 @@ export default function ResetPassword() {
                 loading={submitting}
                 className="!rounded-2xl !bg-[var(--cv-accent)] !border-0"
               >
-                Reset Password
+                Set Password
               </Button>
             </div>
           </Form>

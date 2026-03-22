@@ -179,6 +179,14 @@ const AppRoutes = () => {
         </Suspense>
       ),
     },
+    {
+      path: "/activate-account",
+      element: (
+        <Suspense>
+          <ResetPassword />
+        </Suspense>
+      ),
+    },
     { path: "*", element: <Suspense>{/* <NotFound /> */}</Suspense> },
   ];
 

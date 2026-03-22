@@ -24,15 +24,36 @@ async function remove(url: string) {
 export const operationsApi = {
   automation: {
     async load(tenantId: number) {
-      const [healthData, schoolData] = await Promise.all([
+      const [
+        healthData,
+        schoolData,
+        academicYearData,
+        termData,
+        feeCategoryData,
+        feeStructureData,
+        notificationTemplateData,
+      ] = await Promise.all([
         get("/health/worker/"),
-        get(`/institutions/schools/${tenantId}/`),
+        get(`/api/institutions/schools/${tenantId}/`),
+        get("/api/institutions/academic-years/", { page: 1, page_size: 100 }),
+        get("/api/institutions/terms/", { page: 1, page_size: 100 }),
+        get("/api/finance/fee-categories/", { page: 1, page_size: 100 }),
+        get("/api/finance/fee-structures/", { page: 1, page_size: 100 }),
+        get("/api/communications/notification-templates/", { page: 1, page_size: 100 }),
       ]);
 
-      return { healthData, schoolData };
+      return {
+        healthData,
+        schoolData,
+        academicYearData,
+        termData,
+        feeCategoryData,
+        feeStructureData,
+        notificationTemplateData,
+      };
     },
     updateSettings(tenantId: number, settings: Record<string, unknown>) {
-      return patch(`/institutions/schools/${tenantId}/`, { settings_json: settings });
+      return patch(`/api/institutions/schools/${tenantId}/`, { settings_json: settings });
     },
     runTask(taskType: string) {
       return post("/api/common/automation/run/", { task_type: taskType });
