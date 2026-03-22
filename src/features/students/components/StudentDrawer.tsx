@@ -1,7 +1,16 @@
 import { Card, Descriptions, Drawer, Spin, Table, Tag, Tabs, Typography, Button, Badge, message } from "antd";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import type { StudentDrawerTabKey, StudentRow } from "../studentTypes";
-import { studentApi } from "../studentApi";
+import {
+  useGetStudentTranscriptQuery,
+  useGetStudentAttendanceSummaryQuery,
+  useGetStudentFeeSummaryQuery,
+  useGetStudentGuardiansQuery,
+  useGetStudentDocumentsQuery,
+  useGetStudentYearEnrollmentsQuery,
+  useGetDisciplinaryRecordsQuery,
+  useGetStudentAchievementsQuery,
+} from "../studentsApiSlice";
 
 type DrawerProps = {
   open: boolean;
@@ -35,116 +44,44 @@ const statusTagColor = (s?: string) => {
 export default function StudentDrawer({ open, onClose, student }: DrawerProps) {
   const [activeTab, setActiveTab] = useState<StudentDrawerTabKey>("transcript");
 
-  const [drawerLoading, setDrawerLoading] = useState({
-    transcript: false,
-    attendance: false,
-    fee: false,
-    guardians: false,
-    documents: false,
-    enrollments: false,
-    discipline: false,
-    achievements: false,
-  });
-
-  const [transcript, setTranscript] = useState<any>(null);
-  const [attendanceSummary, setAttendanceSummary] = useState<any>(null);
-  const [feeSummary, setFeeSummary] = useState<any>(null);
-
-  const [studentGuardians, setStudentGuardians] = useState<any[]>([]);
-  const [studentDocuments, setStudentDocuments] = useState<any[]>([]);
-  const [studentYearEnrollments, setStudentYearEnrollments] = useState<any[]>([]);
-  const [disciplinaryRecords, setDisciplinaryRecords] = useState<any[]>([]);
-  const [studentAchievements, setStudentAchievements] = useState<any[]>([]);
-
   const studentId = useMemo(() => student?.student_id ?? student?.id, [student]);
+  const studentPk = student?.id ?? 0;
 
-  useEffect(() => {
-    if (!open || !student) return;
+  const { data: transcript, isFetching: loadingTranscript } = useGetStudentTranscriptQuery(studentPk, { skip: !open || !student });
+  const { data: attendanceSummary, isFetching: loadingAttendance } = useGetStudentAttendanceSummaryQuery(studentPk, { skip: !open || !student });
+  const { data: feeSummary, isFetching: loadingFee } = useGetStudentFeeSummaryQuery(studentPk, { skip: !open || !student });
 
-    setActiveTab("transcript");
-    setTranscript(null);
-    setAttendanceSummary(null);
-    setFeeSummary(null);
-    setStudentGuardians([]);
-    setStudentDocuments([]);
-    setStudentYearEnrollments([]);
-    setDisciplinaryRecords([]);
-    setStudentAchievements([]);
+  const searchParam = studentId ? String(studentId) : undefined;
 
-    setDrawerLoading({
-      transcript: true,
-      attendance: true,
-      fee: true,
-      guardians: false,
-      documents: false,
-      enrollments: false,
-      discipline: false,
-      achievements: false,
-    });
+  const { data: guardiansData, isFetching: loadingGuardians } = useGetStudentGuardiansQuery(
+    { search: searchParam, page_size: 50 },
+    { skip: !open || !student || activeTab !== "guardians" }
+  );
+  const studentGuardians = normalizeResults(guardiansData);
 
-    const pk = student.id;
-    Promise.all([studentApi.transcript(pk), studentApi.attendanceSummary(pk), studentApi.feeSummary(pk)])
-      .then(([t, a, f]) => {
-        setTranscript(t);
-        setAttendanceSummary(a);
-        setFeeSummary(f);
-      })
-      .catch((e: any) => {
-        message.error(e?.response?.data?.detail ?? "Failed to load student details");
-      })
-      .finally(() => {
-        setDrawerLoading((p) => ({
-          ...p,
-          transcript: false,
-          attendance: false,
-          fee: false,
-        }));
-      });
-  }, [open, student]);
+  const { data: documentsData, isFetching: loadingDocuments } = useGetStudentDocumentsQuery(
+    { search: searchParam, page_size: 50 },
+    { skip: !open || !student || activeTab !== "documents" }
+  );
+  const studentDocuments = normalizeResults(documentsData);
 
-  const ensureTabLoaded = async (tabKey: StudentDrawerTabKey) => {
-    if (!open || !studentId) return;
-    if (drawerLoading[tabKey as keyof typeof drawerLoading]) return;
+  const { data: enrollmentsData, isFetching: loadingEnrollments } = useGetStudentYearEnrollmentsQuery(
+    { search: searchParam, page_size: 50 },
+    { skip: !open || !student || activeTab !== "enrollments" }
+  );
+  const studentYearEnrollments = normalizeResults(enrollmentsData);
 
-    const search = String(studentId);
+  const { data: disciplineData, isFetching: loadingDiscipline } = useGetDisciplinaryRecordsQuery(
+    { search: searchParam, page_size: 50 },
+    { skip: !open || !student || activeTab !== "discipline" }
+  );
+  const disciplinaryRecords = normalizeResults(disciplineData);
 
-    try {
-      setDrawerLoading((p) => ({ ...p, [tabKey]: true } as any));
-      switch (tabKey) {
-        case "guardians": {
-          const data = await studentApi.studentGuardians({ search, page_size: 50 });
-          setStudentGuardians(normalizeResults(data));
-          break;
-        }
-        case "documents": {
-          const data = await studentApi.studentDocuments({ search, page_size: 50 });
-          setStudentDocuments(normalizeResults(data));
-          break;
-        }
-        case "enrollments": {
-          const data = await studentApi.studentYearEnrollments({ search, page_size: 50 });
-          setStudentYearEnrollments(normalizeResults(data));
-          break;
-        }
-        case "discipline": {
-          const data = await studentApi.disciplinaryRecords({ search, page_size: 50 });
-          setDisciplinaryRecords(normalizeResults(data));
-          break;
-        }
-        case "achievements": {
-          const data = await studentApi.studentAchievements({ search, page_size: 50 });
-          setStudentAchievements(normalizeResults(data));
-          break;
-        }
-        default:
-          break;
-      }
-    } catch (e: any) {
-      message.error(e?.response?.data?.detail ?? "Failed to load tab data");
-    } finally {
-      setDrawerLoading((p) => ({ ...p, [tabKey]: false } as any));
-    }
-  };
+  const { data: achievementsData, isFetching: loadingAchievements } = useGetStudentAchievementsQuery(
+    { search: searchParam, page_size: 50 },
+    { skip: !open || !student || activeTab !== "achievements" }
+  );
+  const studentAchievements = normalizeResults(achievementsData);
 
   return (
     <Drawer
@@ -186,16 +123,14 @@ export default function StudentDrawer({ open, onClose, student }: DrawerProps) {
           <Tabs
             activeKey={activeTab}
             onChange={(k) => {
-              const next = k as StudentDrawerTabKey;
-              setActiveTab(next);
-              void ensureTabLoaded(next);
+              setActiveTab(k as StudentDrawerTabKey);
             }}
             items={[
               {
                 key: "transcript",
                 label: "Transcript",
                 children:
-                  drawerLoading.transcript ? (
+                  loadingTranscript ? (
                     <div className="py-10 flex justify-center">
                       <Spin />
                     </div>
@@ -240,7 +175,7 @@ export default function StudentDrawer({ open, onClose, student }: DrawerProps) {
                 key: "attendance",
                 label: "Attendance",
                 children:
-                  drawerLoading.attendance ? (
+                  loadingAttendance ? (
                     <div className="py-10 flex justify-center">
                       <Spin />
                     </div>
@@ -285,7 +220,7 @@ export default function StudentDrawer({ open, onClose, student }: DrawerProps) {
                 key: "fee",
                 label: "Fee Summary",
                 children:
-                  drawerLoading.fee ? (
+                  loadingFee ? (
                     <div className="py-10 flex justify-center">
                       <Spin />
                     </div>
@@ -325,7 +260,8 @@ export default function StudentDrawer({ open, onClose, student }: DrawerProps) {
               {
                 key: "guardians",
                 label: "Guardians",
-                children: drawerLoading.guardians ? (
+                children:
+                  loadingGuardians ? (
                   <div className="py-10 flex justify-center">
                     <Spin />
                   </div>
@@ -348,7 +284,8 @@ export default function StudentDrawer({ open, onClose, student }: DrawerProps) {
               {
                 key: "documents",
                 label: "Documents",
-                children: drawerLoading.documents ? (
+                children:
+                  loadingDocuments ? (
                   <div className="py-10 flex justify-center">
                     <Spin />
                   </div>
@@ -383,7 +320,8 @@ export default function StudentDrawer({ open, onClose, student }: DrawerProps) {
               {
                 key: "enrollments",
                 label: "Enrollments",
-                children: drawerLoading.enrollments ? (
+                children:
+                  loadingEnrollments ? (
                   <div className="py-10 flex justify-center">
                     <Spin />
                   </div>
@@ -413,7 +351,8 @@ export default function StudentDrawer({ open, onClose, student }: DrawerProps) {
               {
                 key: "discipline",
                 label: "Discipline",
-                children: drawerLoading.discipline ? (
+                children:
+                  loadingDiscipline ? (
                   <div className="py-10 flex justify-center">
                     <Spin />
                   </div>
@@ -437,7 +376,8 @@ export default function StudentDrawer({ open, onClose, student }: DrawerProps) {
               {
                 key: "achievements",
                 label: "Achievements",
-                children: drawerLoading.achievements ? (
+                children:
+                  loadingAchievements ? (
                   <div className="py-10 flex justify-center">
                     <Spin />
                   </div>

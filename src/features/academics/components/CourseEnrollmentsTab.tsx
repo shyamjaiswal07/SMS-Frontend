@@ -1,8 +1,9 @@
 import { Badge, Card, Input, Select, Table, Tag, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useEffect, useMemo, useState } from "react";
-import { academicsApi } from "../academicsApi";
-import type { CourseEnrollmentRow, CourseRow, Paginated } from "../academicsTypes";
+import { useGetCourseEnrollmentsQuery } from "../academicsApiSlice";
+import type { CourseEnrollmentRow, CourseRow } from "../academicsTypes";
+import { rowsOf } from "@/utils/platform";
 
 const statusTagColor = (s?: string) => {
   switch (s) {
@@ -22,44 +23,21 @@ type Props = {
 };
 
 export default function CourseEnrollmentsTab({ coursesById }: Props) {
-  const [loading, setLoading] = useState(false);
-  const [rows, setRows] = useState<CourseEnrollmentRow[]>([]);
   const [page, setPage] = useState(1);
   const [pageSize] = useState(25);
-  const [total, setTotal] = useState(0);
 
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<"ALL" | string>("ALL");
 
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      setLoading(true);
-      try {
-        const data = await academicsApi.courseEnrollments.list({
-          search: search || undefined,
-          page,
-          page_size: pageSize,
-        });
-        if (!mounted) return;
+  const { data: enrollmentsData, isFetching: loading } = useGetCourseEnrollmentsQuery({
+    search: search || undefined,
+    page,
+    page_size: pageSize,
+  });
 
-        const paginated = data as Paginated<CourseEnrollmentRow>;
-        const list = Array.isArray((data as any)?.results)
-          ? (data as any).results
-          : Array.isArray(data)
-            ? data
-            : [];
-        setRows(list);
-        setTotal(typeof paginated?.count === "number" ? paginated.count : list.length);
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    })();
-    return () => {
-      mounted = false;
-    };
-  }, [page, pageSize, search]);
+  const rows = rowsOf(enrollmentsData) as CourseEnrollmentRow[];
+  const total = typeof enrollmentsData?.count === "number" ? enrollmentsData.count : rows.length;
 
   useEffect(() => {
     setPage(1);

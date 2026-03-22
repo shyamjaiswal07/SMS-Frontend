@@ -1,9 +1,10 @@
 import { FileTextOutlined } from "@ant-design/icons";
 import { Button, Card, Form, Input, Select, Space, Table, Typography, message } from "antd";
 import type { ColumnsType } from "antd/es/table";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import FileAssetUploader from "@/features/files/FileAssetUploader";
-import apiClient from "@/services/apiClient";
+import { studentDocumentsApi } from "@/features/students/studentDocumentsApi";
+import { useGetStudentsQuery, useGetStudentDocumentsQuery } from "@/features/students/studentsApiSlice";
 import { parseApiError, rowsOf } from "@/utils/platform";
 
 type StudentRow = {
@@ -30,32 +31,19 @@ type DocumentForm = {
 };
 
 export default function StudentDocumentCenter() {
-  const [students, setStudents] = useState<StudentRow[]>([]);
-  const [documents, setDocuments] = useState<StudentDocumentRow[]>([]);
-  const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [uploadedAssetId, setUploadedAssetId] = useState<number | null>(null);
   const [form] = Form.useForm<DocumentForm>();
+  const { data: studentsData, isFetching: studentsLoading } = useGetStudentsQuery({ page: 1, page_size: 200 });
+  const {
+    data: documentsData,
+    isFetching: documentsLoading,
+    refetch: refetchDocuments,
+  } = useGetStudentDocumentsQuery({ page_size: 200 });
 
-  const loadAll = async () => {
-    setLoading(true);
-    try {
-      const [studentResponse, documentResponse] = await Promise.all([
-        apiClient.get("/api/students/students/", { params: { page: 1, page_size: 200 } }),
-        apiClient.get("/api/students/student-documents/", { params: { page: 1, page_size: 200 } }),
-      ]);
-      setStudents(rowsOf(studentResponse.data) as StudentRow[]);
-      setDocuments(rowsOf(documentResponse.data) as StudentDocumentRow[]);
-    } catch (error) {
-      message.error(parseApiError(error, "Failed to load student documents"));
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    void loadAll();
-  }, []);
+  const students = rowsOf(studentsData) as StudentRow[];
+  const documents = rowsOf(documentsData) as StudentDocumentRow[];
+  const loading = studentsLoading || documentsLoading;
 
   const studentLabelMap = useMemo(
     () =>
@@ -98,7 +86,7 @@ export default function StudentDocumentCenter() {
               Sprint 2 upload flow with validation, progress, and preview links for student records.
             </Typography.Paragraph>
           </div>
-          <Button onClick={() => void loadAll()} loading={loading}>
+          <Button onClick={() => void refetchDocuments()} loading={loading}>
             Refresh
           </Button>
         </div>
@@ -146,14 +134,14 @@ export default function StudentDocumentCenter() {
                       return;
                     }
                     setSubmitting(true);
-                    await apiClient.post("/api/students/student-documents/", {
+                    await studentDocumentsApi.createDocument({
                       ...values,
                       file_asset: uploadedAssetId,
                     });
                     message.success("Student document linked");
                     form.resetFields();
                     setUploadedAssetId(null);
-                    await loadAll();
+                    await refetchDocuments();
                   } catch (error) {
                     message.error(parseApiError(error, "Unable to save student document"));
                   } finally {

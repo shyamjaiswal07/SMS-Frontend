@@ -3,7 +3,7 @@ import { Button, Card, Col, Input, Modal, Progress, Row, Space, Table, Tag, Typo
 import type { ColumnsType } from "antd/es/table";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import apiClient from "@/services/apiClient";
+import { analyticsApi } from "@/features/analytics/analyticsApi";
 import { currentTenant, parseApiError } from "@/utils/platform";
 
 type OverviewResponse = {
@@ -109,8 +109,8 @@ export default function AnalyticsOverviewPanel() {
   const load = async (params?: Record<string, string>) => {
     setLoading(true);
     try {
-      const response = await apiClient.get("/api/common/analytics/overview/", { params });
-      setOverview(response.data as OverviewResponse);
+      const data = await analyticsApi.getOverview(params);
+      setOverview(data as OverviewResponse);
     } catch (error) {
       message.error(parseApiError(error, "Failed to load analytics overview"));
     } finally {
@@ -126,8 +126,8 @@ export default function AnalyticsOverviewPanel() {
       const params: Record<string, string> = {};
       if (startDate) params.start_date = startDate;
       if (endDate) params.end_date = endDate;
-      const response = await apiClient.get(`/api/common/analytics/${moduleKey}/`, { params });
-      setModuleDetail(response.data as ModuleDetailResponse);
+      const data = await analyticsApi.getModuleDetail(moduleKey, params);
+      setModuleDetail(data as ModuleDetailResponse);
     } catch (error) {
       message.error(parseApiError(error, "Failed to load module analytics"));
     } finally {

@@ -2,8 +2,8 @@ import { ArrowLeftOutlined } from "@ant-design/icons";
 import { Button, Card, Form, Input, Typography, message } from "antd";
 import { useNavigate } from "react-router-dom";
 import { useState } from "react";
+import { authApi } from "@/features/auth/authApi";
 import PasswordRequirementList from "@/features/auth/PasswordRequirementList";
-import { api } from "@/services/api";
 import { parseApiError } from "@/utils/platform";
 
 type RegisterValues = {
@@ -36,7 +36,7 @@ export default function Register() {
           onFinish={async (values) => {
             setSubmitting(true);
             try {
-              await api.register(values.username, values.email, values.password);
+              await authApi.register(values.username, values.email, values.password);
               message.success("Registered successfully");
               navigate("/login", { replace: true });
             } catch (error) {

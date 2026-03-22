@@ -3,7 +3,11 @@ import { Button, Card, Col, Descriptions, Drawer, Form, Input, InputNumber, Moda
 import type { ColumnsType } from "antd/es/table";
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useState } from "react";
-import apiClient from "@/services/apiClient";
+import { useGetAdminUsersQuery } from "@/features/admin/adminApiSlice";
+import { hrApi } from "@/features/hr/hrApi";
+import { useGetStaffProfilesQuery } from "@/features/hr/hrApiSlice";
+import { useGetDepartmentsQuery } from "@/features/institutions/institutionsApiSlice";
+import { parseApiError } from "@/utils/platform";
 
 type Role = "SUPER_ADMIN" | "SCHOOL_ADMIN" | "HR_MANAGER";
 type Paginated<T> = { results?: T[] };
@@ -31,6 +35,17 @@ type StructureForm = { name: string; code: string; pay_frequency: string; curren
 type ComponentForm = { payroll_structure: number; name: string; component_type: string; calculation_type: string; value: number; order: number };
 type AssignmentForm = { staff: number; payroll_structure: number; effective_from: string; effective_to?: string };
 type RunForm = { run_year: number; run_month: number; status: string };
+type HrPageResource =
+  | "staffProfiles"
+  | "employmentHistories"
+  | "qualifications"
+  | "staffDocuments"
+  | "leaveTypes"
+  | "leaveRequests"
+  | "payrollStructures"
+  | "payrollComponents"
+  | "staffPayrollAssignments"
+  | "payrollRuns";
 
 const rowsOf = <T,>(data?: Paginated<T> | T[]) => (Array.isArray(data) ? data : Array.isArray(data?.results) ? data.results : []);
 const dt = (value?: string | null) => (value ? new Date(value).toLocaleDateString() : "-");
@@ -142,41 +157,37 @@ export default function HRPage() {
   const [componentForm] = Form.useForm<ComponentForm>();
   const [assignmentForm] = Form.useForm<AssignmentForm>();
   const [runForm] = Form.useForm<RunForm>();
+  const { data: usersData, isFetching: usersLoading, refetch: refetchUsers } = useGetAdminUsersQuery({ page: 1, page_size: 200 });
+  const { data: departmentsData, isFetching: departmentsLoading, refetch: refetchDepartments } = useGetDepartmentsQuery({ page: 1, page_size: 100 });
+  const { data: staffData, isFetching: staffLoading, refetch: refetchStaff } = useGetStaffProfilesQuery({ page: 1, page_size: 200 });
 
   const loadAll = async () => {
     setLoading(true);
     try {
-      const settled = await Promise.allSettled([
-        apiClient.get("/api/accounts/users/", { params: { page: 1, page_size: 200 } }),
-        apiClient.get("/api/institutions/departments/", { params: { page: 1, page_size: 100 } }),
-        apiClient.get("/api/hr/staff-profiles/", { params: { page: 1, page_size: 100 } }),
-        apiClient.get("/api/hr/employment-histories/", { params: { page: 1, page_size: 200 } }),
-        apiClient.get("/api/hr/qualifications/", { params: { page: 1, page_size: 200 } }),
-        apiClient.get("/api/hr/staff-documents/", { params: { page: 1, page_size: 200 } }),
-        apiClient.get("/api/hr/leave-types/", { params: { page: 1, page_size: 100 } }),
-        apiClient.get("/api/hr/leave-requests/", { params: { page: 1, page_size: 100 } }),
-        apiClient.get("/api/hr/payroll-structures/", { params: { page: 1, page_size: 100 } }),
-        apiClient.get("/api/hr/payroll-components/", { params: { page: 1, page_size: 200 } }),
-        apiClient.get("/api/hr/staff-payroll-assignments/", { params: { page: 1, page_size: 200 } }),
-        apiClient.get("/api/hr/payroll-runs/", { params: { page: 1, page_size: 100 } }),
-        apiClient.get("/api/hr/payslips/", { params: { page: 1, page_size: 200 } }),
-      ]);
-      const valueAt = <T,>(index: number, fallback: T) => (settled[index].status === "fulfilled" ? (settled[index] as PromiseFulfilledResult<{ data: T }>).value.data : fallback);
-      setUsers(rowsOf<User>(valueAt(0, [] as User[])));
-      setDepartments(rowsOf<Department>(valueAt(1, [] as Department[])));
-      setStaff(rowsOf<Staff>(valueAt(2, [] as Staff[])));
-      setHistories(rowsOf<EmploymentHistory>(valueAt(3, [] as EmploymentHistory[])));
-      setQualifications(rowsOf<Qualification>(valueAt(4, [] as Qualification[])));
-      setDocuments(rowsOf<StaffDocument>(valueAt(5, [] as StaffDocument[])));
-      setLeaveTypes(rowsOf<LeaveType>(valueAt(6, [] as LeaveType[])));
-      setLeaveRequests(rowsOf<LeaveRequest>(valueAt(7, [] as LeaveRequest[])));
-      setStructures(rowsOf<PayrollStructure>(valueAt(8, [] as PayrollStructure[])));
-      setComponents(rowsOf<PayrollComponent>(valueAt(9, [] as PayrollComponent[])));
-      setAssignments(rowsOf<StaffPayrollAssignment>(valueAt(10, [] as StaffPayrollAssignment[])));
-      setRuns(rowsOf<PayrollRun>(valueAt(11, [] as PayrollRun[])));
-      setPayslips(rowsOf<Payslip>(valueAt(12, [] as Payslip[])));
-    } catch (error: any) {
-      message.error(error?.response?.data?.detail ?? "Failed to load HR workspace");
+      const {
+        historyData,
+        qualificationData,
+        documentData,
+        leaveTypeData,
+        leaveRequestData,
+        structureData,
+        componentData,
+        assignmentData,
+        runData,
+        payslipData,
+      } = await hrApi.page.loadWorkspace();
+      setHistories(rowsOf<EmploymentHistory>(historyData as Paginated<EmploymentHistory> | EmploymentHistory[]));
+      setQualifications(rowsOf<Qualification>(qualificationData as Paginated<Qualification> | Qualification[]));
+      setDocuments(rowsOf<StaffDocument>(documentData as Paginated<StaffDocument> | StaffDocument[]));
+      setLeaveTypes(rowsOf<LeaveType>(leaveTypeData as Paginated<LeaveType> | LeaveType[]));
+      setLeaveRequests(rowsOf<LeaveRequest>(leaveRequestData as Paginated<LeaveRequest> | LeaveRequest[]));
+      setStructures(rowsOf<PayrollStructure>(structureData as Paginated<PayrollStructure> | PayrollStructure[]));
+      setComponents(rowsOf<PayrollComponent>(componentData as Paginated<PayrollComponent> | PayrollComponent[]));
+      setAssignments(rowsOf<StaffPayrollAssignment>(assignmentData as Paginated<StaffPayrollAssignment> | StaffPayrollAssignment[]));
+      setRuns(rowsOf<PayrollRun>(runData as Paginated<PayrollRun> | PayrollRun[]));
+      setPayslips(rowsOf<Payslip>(payslipData as Paginated<Payslip> | Payslip[]));
+    } catch (error) {
+      message.error(parseApiError(error, "Failed to load HR workspace"));
     } finally {
       setLoading(false);
     }
@@ -185,6 +196,24 @@ export default function HRPage() {
   useEffect(() => {
     void loadAll();
   }, []);
+
+  useEffect(() => {
+    setUsers(rowsOf<User>(usersData as Paginated<User> | User[]));
+  }, [usersData]);
+
+  useEffect(() => {
+    setDepartments(rowsOf<Department>(departmentsData as Paginated<Department> | Department[]));
+  }, [departmentsData]);
+
+  useEffect(() => {
+    setStaff(rowsOf<Staff>(staffData as Paginated<Staff> | Staff[]));
+  }, [staffData]);
+
+  const pageLoading = loading || usersLoading || departmentsLoading || staffLoading;
+
+  const refreshAll = async () => {
+    await Promise.all([loadAll(), refetchUsers(), refetchDepartments(), refetchStaff()]);
+  };
 
   const userMap = useMemo(() => new Map(users.map((item) => [item.id, item.email ?? item.username ?? `User #${item.id}`])), [users]);
   const departmentMap = useMemo(() => new Map(departments.map((item) => [item.id, item.name ?? `Department #${item.id}`])), [departments]);
@@ -200,22 +229,8 @@ export default function HRPage() {
   const selectedStaffAssignments = useMemo(() => assignments.filter((item) => item.staff === selectedStaffId), [assignments, selectedStaffId]);
   const selectedStaffPayslips = useMemo(() => payslips.filter((item) => item.staff === selectedStaffId), [payslips, selectedStaffId]);
 
-  const submitCreate = async (endpoint: string, values: Record<string, unknown>, onDone: () => void, successText: string, failureText: string) => {
-    setSubmitting(true);
-    try {
-      await apiClient.post(endpoint, values);
-      message.success(successText);
-      onDone();
-      await loadAll();
-    } catch (error: any) {
-      message.error(error?.response?.data?.detail ?? failureText);
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
   const submitSave = async (
-    endpoint: string,
+    resource: HrPageResource,
     id: number | null,
     values: Record<string, unknown>,
     onDone: () => void,
@@ -225,39 +240,34 @@ export default function HRPage() {
   ) => {
     setSubmitting(true);
     try {
-      if (id) {
-        await apiClient.patch(`${endpoint}${id}/`, values);
-        message.success(updateText);
-      } else {
-        await apiClient.post(endpoint, values);
-        message.success(createText);
-      }
+      await hrApi.page.saveRecord(resource, values, id);
+      message.success(id ? updateText : createText);
       onDone();
-      await loadAll();
-    } catch (error: any) {
-      message.error(error?.response?.data?.detail ?? failureText);
+      await Promise.all([loadAll(), resource === "staffProfiles" ? refetchStaff() : Promise.resolve()]);
+    } catch (error) {
+      message.error(parseApiError(error, failureText));
     } finally {
       setSubmitting(false);
     }
   };
 
-  const removeRecord = async (endpoint: string, id: number, successText: string, failureText: string) => {
+  const removeRecord = async (resource: HrPageResource, id: number, successText: string, failureText: string) => {
     try {
-      await apiClient.delete(`${endpoint}${id}/`);
+      await hrApi.page.deleteRecord(resource, id);
       message.success(successText);
-      await loadAll();
-    } catch (error: any) {
-      message.error(error?.response?.data?.detail ?? failureText);
+      await Promise.all([loadAll(), resource === "staffProfiles" ? refetchStaff() : Promise.resolve()]);
+    } catch (error) {
+      message.error(parseApiError(error, failureText));
     }
   };
 
-  const updateStatus = async (endpoint: string, id: number, status: string, successText: string, failureText: string) => {
+  const updateLeaveStatus = async (id: number, status: string, successText: string, failureText: string) => {
     try {
-      await apiClient.patch(`${endpoint}${id}/`, { status });
+      await hrApi.page.updateLeaveRequestStatus(id, status);
       message.success(successText);
       await loadAll();
-    } catch (error: any) {
-      message.error(error?.response?.data?.detail ?? failureText);
+    } catch (error) {
+      message.error(parseApiError(error, failureText));
     }
   };
 
@@ -286,7 +296,7 @@ export default function HRPage() {
             });
             setStaffOpen(true);
           }} /> : null}
-          {canWrite ? <ConfirmIconActionButton label="Delete staff profile" confirmTitle="Delete this staff profile?" icon={<DeleteOutlined />} danger onConfirm={() => void removeRecord("/api/hr/staff-profiles/", row.id, "Staff profile deleted", "Failed to delete staff profile")} /> : null}
+          {canWrite ? <ConfirmIconActionButton label="Delete staff profile" confirmTitle="Delete this staff profile?" icon={<DeleteOutlined />} danger onConfirm={() => void removeRecord("staffProfiles", row.id, "Staff profile deleted", "Failed to delete staff profile")} /> : null}
         </Space>
       ),
     },
@@ -306,7 +316,7 @@ export default function HRPage() {
             leaveTypeForm.setFieldsValue({ name: row.name, code: row.code, max_days_per_year: row.max_days_per_year ?? 12, is_paid: row.is_paid ?? true });
             setLeaveTypeOpen(true);
           }} />
-          <ConfirmIconActionButton label="Delete leave type" confirmTitle="Delete this leave type?" icon={<DeleteOutlined />} danger onConfirm={() => void removeRecord("/api/hr/leave-types/", row.id, "Leave type deleted", "Failed to delete leave type")} />
+          <ConfirmIconActionButton label="Delete leave type" confirmTitle="Delete this leave type?" icon={<DeleteOutlined />} danger onConfirm={() => void removeRecord("leaveTypes", row.id, "Leave type deleted", "Failed to delete leave type")} />
         </Space>
       ) : null,
     },
@@ -321,8 +331,8 @@ export default function HRPage() {
       key: "actions",
       render: (_, row) => canWrite ? (
         <Space size={4} wrap>
-          {row.status !== "APPROVED" ? <IconActionButton label="Approve leave request" icon={<CheckOutlined />} className="!text-emerald-400 hover:!text-emerald-300" onClick={() => void updateStatus("/api/hr/leave-requests/", row.id, "APPROVED", "Leave request approved", "Failed to approve leave request")} /> : null}
-          {row.status !== "REJECTED" ? <IconActionButton label="Reject leave request" icon={<CloseOutlined />} danger onClick={() => void updateStatus("/api/hr/leave-requests/", row.id, "REJECTED", "Leave request rejected", "Failed to reject leave request")} /> : null}
+          {row.status !== "APPROVED" ? <IconActionButton label="Approve leave request" icon={<CheckOutlined />} className="!text-emerald-400 hover:!text-emerald-300" onClick={() => void updateLeaveStatus(row.id, "APPROVED", "Leave request approved", "Failed to approve leave request")} /> : null}
+          {row.status !== "REJECTED" ? <IconActionButton label="Reject leave request" icon={<CloseOutlined />} danger onClick={() => void updateLeaveStatus(row.id, "REJECTED", "Leave request rejected", "Failed to reject leave request")} /> : null}
           <IconActionButton label="Edit leave request" icon={<EditOutlined />} onClick={() => {
             setEditingLeaveRequestId(row.id);
             leaveForm.setFieldsValue({
@@ -334,7 +344,7 @@ export default function HRPage() {
             });
             setLeaveOpen(true);
           }} />
-          <ConfirmIconActionButton label="Delete leave request" confirmTitle="Delete this leave request?" icon={<DeleteOutlined />} danger onConfirm={() => void removeRecord("/api/hr/leave-requests/", row.id, "Leave request deleted", "Failed to delete leave request")} />
+          <ConfirmIconActionButton label="Delete leave request" confirmTitle="Delete this leave request?" icon={<DeleteOutlined />} danger onConfirm={() => void removeRecord("leaveRequests", row.id, "Leave request deleted", "Failed to delete leave request")} />
         </Space>
       ) : null,
     },
@@ -361,7 +371,7 @@ export default function HRPage() {
             });
             setHistoryOpen(true);
           }} />
-          <ConfirmIconActionButton label="Delete employment history" confirmTitle="Delete this employment history?" icon={<DeleteOutlined />} danger onConfirm={() => void removeRecord("/api/hr/employment-histories/", row.id, "Employment history deleted", "Failed to delete employment history")} />
+          <ConfirmIconActionButton label="Delete employment history" confirmTitle="Delete this employment history?" icon={<DeleteOutlined />} danger onConfirm={() => void removeRecord("employmentHistories", row.id, "Employment history deleted", "Failed to delete employment history")} />
         </Space>
       ) : null,
     },
@@ -387,7 +397,7 @@ export default function HRPage() {
             });
             setQualificationOpen(true);
           }} />
-          <ConfirmIconActionButton label="Delete qualification" confirmTitle="Delete this qualification?" icon={<DeleteOutlined />} danger onConfirm={() => void removeRecord("/api/hr/qualifications/", row.id, "Qualification deleted", "Failed to delete qualification")} />
+          <ConfirmIconActionButton label="Delete qualification" confirmTitle="Delete this qualification?" icon={<DeleteOutlined />} danger onConfirm={() => void removeRecord("qualifications", row.id, "Qualification deleted", "Failed to delete qualification")} />
         </Space>
       ) : null,
     },
@@ -412,7 +422,7 @@ export default function HRPage() {
             });
             setDocumentOpen(true);
           }} />
-          <ConfirmIconActionButton label="Delete document" confirmTitle="Delete this document?" icon={<DeleteOutlined />} danger onConfirm={() => void removeRecord("/api/hr/staff-documents/", row.id, "Document deleted", "Failed to delete document")} />
+          <ConfirmIconActionButton label="Delete document" confirmTitle="Delete this document?" icon={<DeleteOutlined />} danger onConfirm={() => void removeRecord("staffDocuments", row.id, "Document deleted", "Failed to delete document")} />
         </Space>
       ) : null,
     },
@@ -431,7 +441,7 @@ export default function HRPage() {
             structureForm.setFieldsValue({ name: row.name, code: row.code, pay_frequency: row.pay_frequency ?? "MONTHLY", currency: row.currency ?? "INR" });
             setStructureOpen(true);
           }} />
-          <ConfirmIconActionButton label="Delete payroll structure" confirmTitle="Delete this payroll structure?" icon={<DeleteOutlined />} danger onConfirm={() => void removeRecord("/api/hr/payroll-structures/", row.id, "Payroll structure deleted", "Failed to delete payroll structure")} />
+          <ConfirmIconActionButton label="Delete payroll structure" confirmTitle="Delete this payroll structure?" icon={<DeleteOutlined />} danger onConfirm={() => void removeRecord("payrollStructures", row.id, "Payroll structure deleted", "Failed to delete payroll structure")} />
         </Space>
       ) : null,
     },
@@ -459,7 +469,7 @@ export default function HRPage() {
             });
             setComponentOpen(true);
           }} />
-          <ConfirmIconActionButton label="Delete payroll component" confirmTitle="Delete this payroll component?" icon={<DeleteOutlined />} danger onConfirm={() => void removeRecord("/api/hr/payroll-components/", row.id, "Payroll component deleted", "Failed to delete payroll component")} />
+          <ConfirmIconActionButton label="Delete payroll component" confirmTitle="Delete this payroll component?" icon={<DeleteOutlined />} danger onConfirm={() => void removeRecord("payrollComponents", row.id, "Payroll component deleted", "Failed to delete payroll component")} />
         </Space>
       ) : null,
     },
@@ -484,7 +494,7 @@ export default function HRPage() {
             });
             setAssignmentOpen(true);
           }} />
-          <ConfirmIconActionButton label="Delete payroll assignment" confirmTitle="Delete this payroll assignment?" icon={<DeleteOutlined />} danger onConfirm={() => void removeRecord("/api/hr/staff-payroll-assignments/", row.id, "Payroll assignment deleted", "Failed to delete payroll assignment")} />
+          <ConfirmIconActionButton label="Delete payroll assignment" confirmTitle="Delete this payroll assignment?" icon={<DeleteOutlined />} danger onConfirm={() => void removeRecord("staffPayrollAssignments", row.id, "Payroll assignment deleted", "Failed to delete payroll assignment")} />
         </Space>
       ) : null,
     },
@@ -503,7 +513,7 @@ export default function HRPage() {
             runForm.setFieldsValue({ run_year: row.run_year, run_month: row.run_month, status: row.status ?? "DRAFT" });
             setRunOpen(true);
           }} />
-          <ConfirmIconActionButton label="Delete payroll run" confirmTitle="Delete this payroll run?" icon={<DeleteOutlined />} danger onConfirm={() => void removeRecord("/api/hr/payroll-runs/", row.id, "Payroll run deleted", "Failed to delete payroll run")} />
+          <ConfirmIconActionButton label="Delete payroll run" confirmTitle="Delete this payroll run?" icon={<DeleteOutlined />} danger onConfirm={() => void removeRecord("payrollRuns", row.id, "Payroll run deleted", "Failed to delete payroll run")} />
         </Space>
       ) : null,
     },
@@ -529,7 +539,7 @@ export default function HRPage() {
         </div>
         <Space wrap>
           <Tag color="purple">{role ?? "UNKNOWN"}</Tag>
-          <Button className="!rounded-2xl" icon={<ReloadOutlined />} onClick={() => void loadAll()} loading={loading}>
+          <Button className="!rounded-2xl" icon={<ReloadOutlined />} onClick={() => void refreshAll()} loading={pageLoading}>
             Refresh
           </Button>
         </Space>
@@ -555,7 +565,7 @@ export default function HRPage() {
                     <div><div className="text-white font-medium">Staff Profiles</div><div className="text-white/55 text-sm">Employee records, departments, and employment status.</div></div>
                     {canWrite ? <Button type="primary" className="!rounded-2xl !bg-[var(--cv-accent)] !border-0" icon={<PlusOutlined />} onClick={() => { staffForm.resetFields(); staffForm.setFieldsValue({ employment_status: "ACTIVE" }); setStaffOpen(true); }}>Add Staff</Button> : null}
                   </div>
-                  <Table rowKey="id" loading={loading} dataSource={staff} columns={staffColumns} pagination={{ pageSize: 8 }} />
+                  <Table rowKey="id" loading={pageLoading} dataSource={staff} columns={staffColumns} pagination={{ pageSize: 8 }} />
                 </Card>
                 <Row gutter={[16, 16]}>
                   <Col xs={24} xl={8}>
@@ -564,7 +574,7 @@ export default function HRPage() {
                         <div><div className="text-white font-medium">Employment History</div><div className="text-white/55 text-sm">Track role changes and prior positions.</div></div>
                         {canWrite ? <Button className="!rounded-2xl" icon={<PlusOutlined />} onClick={() => { historyForm.resetFields(); setHistoryOpen(true); }}>Add History</Button> : null}
                       </div>
-                      <Table rowKey="id" loading={loading} dataSource={histories} columns={historyColumns} pagination={{ pageSize: 5 }} />
+                      <Table rowKey="id" loading={pageLoading} dataSource={histories} columns={historyColumns} pagination={{ pageSize: 5 }} />
                     </Card>
                   </Col>
                   <Col xs={24} xl={8}>
@@ -573,7 +583,7 @@ export default function HRPage() {
                         <div><div className="text-white font-medium">Qualifications</div><div className="text-white/55 text-sm">Academic and certification records for staff.</div></div>
                         {canWrite ? <Button className="!rounded-2xl" icon={<PlusOutlined />} onClick={() => { qualificationForm.resetFields(); setQualificationOpen(true); }}>Add Qualification</Button> : null}
                       </div>
-                      <Table rowKey="id" loading={loading} dataSource={qualifications} columns={qualificationColumns} pagination={{ pageSize: 5 }} />
+                      <Table rowKey="id" loading={pageLoading} dataSource={qualifications} columns={qualificationColumns} pagination={{ pageSize: 5 }} />
                     </Card>
                   </Col>
                   <Col xs={24} xl={8}>
@@ -582,7 +592,7 @@ export default function HRPage() {
                         <div><div className="text-white font-medium">Staff Documents</div><div className="text-white/55 text-sm">Compliance and identity document links.</div></div>
                         {canWrite ? <Button className="!rounded-2xl" icon={<PlusOutlined />} onClick={() => { documentForm.resetFields(); setDocumentOpen(true); }}>Add Document</Button> : null}
                       </div>
-                      <Table rowKey="id" loading={loading} dataSource={documents} columns={documentColumns} pagination={{ pageSize: 5 }} />
+                      <Table rowKey="id" loading={pageLoading} dataSource={documents} columns={documentColumns} pagination={{ pageSize: 5 }} />
                     </Card>
                   </Col>
                 </Row>
@@ -600,7 +610,7 @@ export default function HRPage() {
                       <div><div className="text-white font-medium">Leave Types</div><div className="text-white/55 text-sm">Paid and unpaid leave policies.</div></div>
                       {canWrite ? <Button className="!rounded-2xl" icon={<PlusOutlined />} onClick={() => { leaveTypeForm.resetFields(); leaveTypeForm.setFieldsValue({ max_days_per_year: 12, is_paid: true }); setLeaveTypeOpen(true); }}>Add Leave Type</Button> : null}
                     </div>
-                    <Table rowKey="id" loading={loading} dataSource={leaveTypes} columns={leaveTypeColumns} pagination={{ pageSize: 6 }} />
+                    <Table rowKey="id" loading={pageLoading} dataSource={leaveTypes} columns={leaveTypeColumns} pagination={{ pageSize: 6 }} />
                   </Card>
                 </Col>
                 <Col xs={24} xl={14}>
@@ -609,7 +619,7 @@ export default function HRPage() {
                       <div><div className="text-white font-medium">Leave Requests</div><div className="text-white/55 text-sm">Request windows and approval states.</div></div>
                       {canWrite ? <Button className="!rounded-2xl" icon={<PlusOutlined />} onClick={() => { leaveForm.resetFields(); leaveForm.setFieldsValue({ status: "PENDING" }); setLeaveOpen(true); }}>Create Leave Request</Button> : null}
                     </div>
-                    <Table rowKey="id" loading={loading} dataSource={leaveRequests} columns={leaveColumns} pagination={{ pageSize: 6 }} />
+                    <Table rowKey="id" loading={pageLoading} dataSource={leaveRequests} columns={leaveColumns} pagination={{ pageSize: 6 }} />
                   </Card>
                 </Col>
               </Row>
@@ -627,7 +637,7 @@ export default function HRPage() {
                         <div><div className="text-white font-medium">Payroll Structures</div><div className="text-white/55 text-sm">Base salary structures and payroll frequency.</div></div>
                         {canWrite ? <Button className="!rounded-2xl" icon={<PlusOutlined />} onClick={() => { structureForm.resetFields(); structureForm.setFieldsValue({ pay_frequency: "MONTHLY", currency: "INR" }); setStructureOpen(true); }}>Add Structure</Button> : null}
                       </div>
-                      <Table rowKey="id" loading={loading} dataSource={structures} columns={structureColumns} pagination={{ pageSize: 5 }} />
+                      <Table rowKey="id" loading={pageLoading} dataSource={structures} columns={structureColumns} pagination={{ pageSize: 5 }} />
                     </Card>
                   </Col>
                   <Col xs={24} xl={12}>
@@ -636,7 +646,7 @@ export default function HRPage() {
                         <div><div className="text-white font-medium">Payroll Components</div><div className="text-white/55 text-sm">Earnings and deductions per structure.</div></div>
                         {canWrite ? <Button className="!rounded-2xl" icon={<PlusOutlined />} onClick={() => { componentForm.resetFields(); componentForm.setFieldsValue({ component_type: "EARNING", calculation_type: "FIXED", value: 0, order: 1 }); setComponentOpen(true); }}>Add Component</Button> : null}
                       </div>
-                      <Table rowKey="id" loading={loading} dataSource={components} columns={componentColumns} pagination={{ pageSize: 5 }} />
+                      <Table rowKey="id" loading={pageLoading} dataSource={components} columns={componentColumns} pagination={{ pageSize: 5 }} />
                     </Card>
                   </Col>
                 </Row>
@@ -645,18 +655,18 @@ export default function HRPage() {
                     <div><div className="text-white font-medium">Staff Payroll Assignments</div><div className="text-white/55 text-sm">Connect staff to payroll structures with effective dates.</div></div>
                     {canWrite ? <Button className="!rounded-2xl" icon={<PlusOutlined />} onClick={() => { assignmentForm.resetFields(); setAssignmentOpen(true); }}>Assign Structure</Button> : null}
                   </div>
-                  <Table rowKey="id" loading={loading} dataSource={assignments} columns={assignmentColumns} pagination={{ pageSize: 6 }} />
+                  <Table rowKey="id" loading={pageLoading} dataSource={assignments} columns={assignmentColumns} pagination={{ pageSize: 6 }} />
                 </Card>
                 <Card className="!bg-[var(--cv-card)] !border-white/10 !rounded-3xl">
                   <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
                     <div><div className="text-white font-medium">Payroll Runs</div><div className="text-white/55 text-sm">Manage payroll execution periods.</div></div>
                     {canWrite ? <Button className="!rounded-2xl" icon={<PlusOutlined />} onClick={() => { runForm.resetFields(); runForm.setFieldsValue({ status: "DRAFT", run_year: new Date().getFullYear(), run_month: new Date().getMonth() + 1 }); setRunOpen(true); }}>Create Run</Button> : null}
                   </div>
-                  <Table rowKey="id" loading={loading} dataSource={runs} columns={runColumns} pagination={{ pageSize: 6 }} />
+                  <Table rowKey="id" loading={pageLoading} dataSource={runs} columns={runColumns} pagination={{ pageSize: 6 }} />
                 </Card>
                 <Card className="!bg-[var(--cv-card)] !border-white/10 !rounded-3xl">
                   <div className="text-white font-medium mb-3">Payslips</div>
-                  <Table rowKey="id" loading={loading} dataSource={payslips} columns={payslipColumns} pagination={{ pageSize: 8 }} />
+                  <Table rowKey="id" loading={pageLoading} dataSource={payslips} columns={payslipColumns} pagination={{ pageSize: 8 }} />
                 </Card>
               </div>
             ),
@@ -664,7 +674,7 @@ export default function HRPage() {
         ]}
       />
 
-      <Modal title={editingStaffId ? "Edit Staff Profile" : "Create Staff Profile"} open={staffOpen} onCancel={() => { setStaffOpen(false); setEditingStaffId(null); }} onOk={() => void staffForm.validateFields().then((values) => submitSave("/api/hr/staff-profiles/", editingStaffId, values, () => { setStaffOpen(false); setEditingStaffId(null); }, "Staff profile created", "Staff profile updated", "Failed to save staff profile"))} confirmLoading={submitting} width={820}>
+      <Modal title={editingStaffId ? "Edit Staff Profile" : "Create Staff Profile"} open={staffOpen} onCancel={() => { setStaffOpen(false); setEditingStaffId(null); }} onOk={() => void staffForm.validateFields().then((values) => submitSave("staffProfiles", editingStaffId, values, () => { setStaffOpen(false); setEditingStaffId(null); }, "Staff profile created", "Staff profile updated", "Failed to save staff profile"))} confirmLoading={submitting} width={820}>
         <Form<StaffForm> form={staffForm} layout="vertical" requiredMark={false}>
           <Row gutter={12}>
             <Col span={12}><Form.Item name="user" label="Linked User"><Select showSearch optionFilterProp="label" options={users.map((item) => ({ value: item.id, label: userMap.get(item.id) ?? `User #${item.id}` }))} allowClear /></Form.Item></Col>
@@ -689,7 +699,7 @@ export default function HRPage() {
         </Form>
       </Modal>
 
-      <Modal title={editingLeaveTypeId ? "Edit Leave Type" : "Create Leave Type"} open={leaveTypeOpen} onCancel={() => { setLeaveTypeOpen(false); setEditingLeaveTypeId(null); }} onOk={() => void leaveTypeForm.validateFields().then((values) => submitSave("/api/hr/leave-types/", editingLeaveTypeId, values, () => { setLeaveTypeOpen(false); setEditingLeaveTypeId(null); }, "Leave type created", "Leave type updated", "Failed to save leave type"))} confirmLoading={submitting}>
+      <Modal title={editingLeaveTypeId ? "Edit Leave Type" : "Create Leave Type"} open={leaveTypeOpen} onCancel={() => { setLeaveTypeOpen(false); setEditingLeaveTypeId(null); }} onOk={() => void leaveTypeForm.validateFields().then((values) => submitSave("leaveTypes", editingLeaveTypeId, values, () => { setLeaveTypeOpen(false); setEditingLeaveTypeId(null); }, "Leave type created", "Leave type updated", "Failed to save leave type"))} confirmLoading={submitting}>
         <Form<LeaveTypeForm> form={leaveTypeForm} layout="vertical" requiredMark={false}>
           <Form.Item name="name" label="Name" rules={[{ required: true }]}><Input /></Form.Item>
           <Form.Item name="code" label="Code" rules={[{ required: true }]}><Input /></Form.Item>
@@ -698,7 +708,7 @@ export default function HRPage() {
         </Form>
       </Modal>
 
-      <Modal title={editingHistoryId ? "Edit Employment History" : "Add Employment History"} open={historyOpen} onCancel={() => { setHistoryOpen(false); setEditingHistoryId(null); }} onOk={() => void historyForm.validateFields().then((values) => submitSave("/api/hr/employment-histories/", editingHistoryId, values, () => { setHistoryOpen(false); setEditingHistoryId(null); }, "Employment history added", "Employment history updated", "Failed to save employment history"))} confirmLoading={submitting}>
+      <Modal title={editingHistoryId ? "Edit Employment History" : "Add Employment History"} open={historyOpen} onCancel={() => { setHistoryOpen(false); setEditingHistoryId(null); }} onOk={() => void historyForm.validateFields().then((values) => submitSave("employmentHistories", editingHistoryId, values, () => { setHistoryOpen(false); setEditingHistoryId(null); }, "Employment history added", "Employment history updated", "Failed to save employment history"))} confirmLoading={submitting}>
         <Form<HistoryForm> form={historyForm} layout="vertical" requiredMark={false}>
           <Form.Item name="staff" label="Staff" rules={[{ required: true }]}><Select showSearch optionFilterProp="label" options={staff.map((item) => ({ value: item.id, label: staffMap.get(item.id) ?? `Staff #${item.id}` }))} /></Form.Item>
           <Form.Item name="title" label="Title" rules={[{ required: true }]}><Input /></Form.Item>
@@ -711,7 +721,7 @@ export default function HRPage() {
         </Form>
       </Modal>
 
-      <Modal title={editingQualificationId ? "Edit Qualification" : "Add Qualification"} open={qualificationOpen} onCancel={() => { setQualificationOpen(false); setEditingQualificationId(null); }} onOk={() => void qualificationForm.validateFields().then((values) => submitSave("/api/hr/qualifications/", editingQualificationId, values, () => { setQualificationOpen(false); setEditingQualificationId(null); }, "Qualification added", "Qualification updated", "Failed to save qualification"))} confirmLoading={submitting}>
+      <Modal title={editingQualificationId ? "Edit Qualification" : "Add Qualification"} open={qualificationOpen} onCancel={() => { setQualificationOpen(false); setEditingQualificationId(null); }} onOk={() => void qualificationForm.validateFields().then((values) => submitSave("qualifications", editingQualificationId, values, () => { setQualificationOpen(false); setEditingQualificationId(null); }, "Qualification added", "Qualification updated", "Failed to save qualification"))} confirmLoading={submitting}>
         <Form<QualificationForm> form={qualificationForm} layout="vertical" requiredMark={false}>
           <Form.Item name="staff" label="Staff" rules={[{ required: true }]}><Select showSearch optionFilterProp="label" options={staff.map((item) => ({ value: item.id, label: staffMap.get(item.id) ?? `Staff #${item.id}` }))} /></Form.Item>
           <Form.Item name="qualification_name" label="Qualification" rules={[{ required: true }]}><Input /></Form.Item>
@@ -723,7 +733,7 @@ export default function HRPage() {
         </Form>
       </Modal>
 
-      <Modal title={editingDocumentId ? "Edit Staff Document" : "Add Staff Document"} open={documentOpen} onCancel={() => { setDocumentOpen(false); setEditingDocumentId(null); }} onOk={() => void documentForm.validateFields().then((values) => submitSave("/api/hr/staff-documents/", editingDocumentId, values, () => { setDocumentOpen(false); setEditingDocumentId(null); }, "Document added", "Document updated", "Failed to save document"))} confirmLoading={submitting}>
+      <Modal title={editingDocumentId ? "Edit Staff Document" : "Add Staff Document"} open={documentOpen} onCancel={() => { setDocumentOpen(false); setEditingDocumentId(null); }} onOk={() => void documentForm.validateFields().then((values) => submitSave("staffDocuments", editingDocumentId, values, () => { setDocumentOpen(false); setEditingDocumentId(null); }, "Document added", "Document updated", "Failed to save document"))} confirmLoading={submitting}>
         <Form<DocumentForm> form={documentForm} layout="vertical" requiredMark={false}>
           <Form.Item name="staff" label="Staff" rules={[{ required: true }]}><Select showSearch optionFilterProp="label" options={staff.map((item) => ({ value: item.id, label: staffMap.get(item.id) ?? `Staff #${item.id}` }))} /></Form.Item>
           <Form.Item name="document_type" label="Document Type" rules={[{ required: true }]}><Input /></Form.Item>
@@ -732,7 +742,7 @@ export default function HRPage() {
         </Form>
       </Modal>
 
-      <Modal title={editingLeaveRequestId ? "Edit Leave Request" : "Create Leave Request"} open={leaveOpen} onCancel={() => { setLeaveOpen(false); setEditingLeaveRequestId(null); }} onOk={() => void leaveForm.validateFields().then((values) => submitSave("/api/hr/leave-requests/", editingLeaveRequestId, values, () => { setLeaveOpen(false); setEditingLeaveRequestId(null); }, "Leave request created", "Leave request updated", "Failed to save leave request"))} confirmLoading={submitting}>
+      <Modal title={editingLeaveRequestId ? "Edit Leave Request" : "Create Leave Request"} open={leaveOpen} onCancel={() => { setLeaveOpen(false); setEditingLeaveRequestId(null); }} onOk={() => void leaveForm.validateFields().then((values) => submitSave("leaveRequests", editingLeaveRequestId, values, () => { setLeaveOpen(false); setEditingLeaveRequestId(null); }, "Leave request created", "Leave request updated", "Failed to save leave request"))} confirmLoading={submitting}>
         <Form<LeaveRequestForm> form={leaveForm} layout="vertical" requiredMark={false}>
           <Form.Item name="staff" label="Staff" rules={[{ required: true }]}><Select showSearch optionFilterProp="label" options={staff.map((item) => ({ value: item.id, label: staffMap.get(item.id) ?? `Staff #${item.id}` }))} /></Form.Item>
           <Form.Item name="leave_type" label="Leave Type" rules={[{ required: true }]}><Select showSearch optionFilterProp="label" options={leaveTypes.map((item) => ({ value: item.id, label: leaveTypeMap.get(item.id) ?? item.name }))} /></Form.Item>
@@ -745,7 +755,7 @@ export default function HRPage() {
         </Form>
       </Modal>
 
-      <Modal title={editingRunId ? "Edit Payroll Run" : "Create Payroll Run"} open={runOpen} onCancel={() => { setRunOpen(false); setEditingRunId(null); }} onOk={() => void runForm.validateFields().then((values) => submitSave("/api/hr/payroll-runs/", editingRunId, values, () => { setRunOpen(false); setEditingRunId(null); }, "Payroll run created", "Payroll run updated", "Failed to save payroll run"))} confirmLoading={submitting}>
+      <Modal title={editingRunId ? "Edit Payroll Run" : "Create Payroll Run"} open={runOpen} onCancel={() => { setRunOpen(false); setEditingRunId(null); }} onOk={() => void runForm.validateFields().then((values) => submitSave("payrollRuns", editingRunId, values, () => { setRunOpen(false); setEditingRunId(null); }, "Payroll run created", "Payroll run updated", "Failed to save payroll run"))} confirmLoading={submitting}>
         <Form<RunForm> form={runForm} layout="vertical" requiredMark={false}>
           <Row gutter={12}>
             <Col span={8}><Form.Item name="run_year" label="Run Year" rules={[{ required: true }]}><InputNumber className="!w-full" /></Form.Item></Col>
@@ -755,7 +765,7 @@ export default function HRPage() {
         </Form>
       </Modal>
 
-      <Modal title={editingStructureId ? "Edit Payroll Structure" : "Create Payroll Structure"} open={structureOpen} onCancel={() => { setStructureOpen(false); setEditingStructureId(null); }} onOk={() => void structureForm.validateFields().then((values) => submitSave("/api/hr/payroll-structures/", editingStructureId, values, () => { setStructureOpen(false); setEditingStructureId(null); }, "Payroll structure created", "Payroll structure updated", "Failed to save payroll structure"))} confirmLoading={submitting}>
+      <Modal title={editingStructureId ? "Edit Payroll Structure" : "Create Payroll Structure"} open={structureOpen} onCancel={() => { setStructureOpen(false); setEditingStructureId(null); }} onOk={() => void structureForm.validateFields().then((values) => submitSave("payrollStructures", editingStructureId, values, () => { setStructureOpen(false); setEditingStructureId(null); }, "Payroll structure created", "Payroll structure updated", "Failed to save payroll structure"))} confirmLoading={submitting}>
         <Form<StructureForm> form={structureForm} layout="vertical" requiredMark={false}>
           <Form.Item name="name" label="Name" rules={[{ required: true }]}><Input /></Form.Item>
           <Form.Item name="code" label="Code" rules={[{ required: true }]}><Input /></Form.Item>
@@ -766,7 +776,7 @@ export default function HRPage() {
         </Form>
       </Modal>
 
-      <Modal title={editingComponentId ? "Edit Payroll Component" : "Create Payroll Component"} open={componentOpen} onCancel={() => { setComponentOpen(false); setEditingComponentId(null); }} onOk={() => void componentForm.validateFields().then((values) => submitSave("/api/hr/payroll-components/", editingComponentId, values, () => { setComponentOpen(false); setEditingComponentId(null); }, "Payroll component created", "Payroll component updated", "Failed to save payroll component"))} confirmLoading={submitting}>
+      <Modal title={editingComponentId ? "Edit Payroll Component" : "Create Payroll Component"} open={componentOpen} onCancel={() => { setComponentOpen(false); setEditingComponentId(null); }} onOk={() => void componentForm.validateFields().then((values) => submitSave("payrollComponents", editingComponentId, values, () => { setComponentOpen(false); setEditingComponentId(null); }, "Payroll component created", "Payroll component updated", "Failed to save payroll component"))} confirmLoading={submitting}>
         <Form<ComponentForm> form={componentForm} layout="vertical" requiredMark={false}>
           <Form.Item name="payroll_structure" label="Payroll Structure" rules={[{ required: true }]}><Select showSearch optionFilterProp="label" options={structures.map((item) => ({ value: item.id, label: structureMap.get(item.id) ?? item.name }))} /></Form.Item>
           <Form.Item name="name" label="Name" rules={[{ required: true }]}><Input /></Form.Item>
@@ -781,7 +791,7 @@ export default function HRPage() {
         </Form>
       </Modal>
 
-      <Modal title={editingAssignmentId ? "Edit Payroll Assignment" : "Assign Payroll Structure"} open={assignmentOpen} onCancel={() => { setAssignmentOpen(false); setEditingAssignmentId(null); }} onOk={() => void assignmentForm.validateFields().then((values) => submitSave("/api/hr/staff-payroll-assignments/", editingAssignmentId, values, () => { setAssignmentOpen(false); setEditingAssignmentId(null); }, "Payroll assignment created", "Payroll assignment updated", "Failed to save payroll assignment"))} confirmLoading={submitting}>
+      <Modal title={editingAssignmentId ? "Edit Payroll Assignment" : "Assign Payroll Structure"} open={assignmentOpen} onCancel={() => { setAssignmentOpen(false); setEditingAssignmentId(null); }} onOk={() => void assignmentForm.validateFields().then((values) => submitSave("staffPayrollAssignments", editingAssignmentId, values, () => { setAssignmentOpen(false); setEditingAssignmentId(null); }, "Payroll assignment created", "Payroll assignment updated", "Failed to save payroll assignment"))} confirmLoading={submitting}>
         <Form<AssignmentForm> form={assignmentForm} layout="vertical" requiredMark={false}>
           <Form.Item name="staff" label="Staff" rules={[{ required: true }]}><Select showSearch optionFilterProp="label" options={staff.map((item) => ({ value: item.id, label: staffMap.get(item.id) ?? `Staff #${item.id}` }))} /></Form.Item>
           <Form.Item name="payroll_structure" label="Payroll Structure" rules={[{ required: true }]}><Select showSearch optionFilterProp="label" options={structures.map((item) => ({ value: item.id, label: structureMap.get(item.id) ?? item.name }))} /></Form.Item>

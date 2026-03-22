@@ -2,7 +2,7 @@ import { ApiOutlined, LinkOutlined, ReloadOutlined, RocketOutlined } from "@ant-
 import { Button, Card, Col, Form, Input, InputNumber, Modal, Popconfirm, Row, Select, Space, Table, Tag, Typography, message } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useEffect, useState } from "react";
-import apiClient from "@/services/apiClient";
+import { operationsApi } from "@/features/operations/operationsApi";
 import { formatDateTime, parseApiError, rowsOf } from "@/utils/platform";
 
 type ConnectorRow = {
@@ -119,20 +119,13 @@ export default function IntegrationsCenter() {
   const loadAll = async () => {
     setLoading(true);
     try {
-      const [connectorResponse, syncResponse, dispatchResponse, webhookResponse, eventResponse, deliveryResponse] = await Promise.all([
-        apiClient.get("/api/common/integration-connectors/", { params: { page: 1, page_size: 100 } }),
-        apiClient.get("/api/common/integration-sync-runs/", { params: { page: 1, page_size: 100 } }),
-        apiClient.get("/api/common/integration-dispatch-logs/", { params: { page: 1, page_size: 100 } }),
-        apiClient.get("/api/common/webhook-endpoints/", { params: { page: 1, page_size: 100 } }),
-        apiClient.get("/api/common/domain-events/", { params: { page: 1, page_size: 100 } }),
-        apiClient.get("/api/common/webhook-deliveries/", { params: { page: 1, page_size: 100 } }),
-      ]);
-      setConnectors(rowsOf(connectorResponse.data) as ConnectorRow[]);
-      setSyncRuns(rowsOf(syncResponse.data) as SyncRunRow[]);
-      setDispatchLogs(rowsOf(dispatchResponse.data) as DispatchLogRow[]);
-      setWebhooks(rowsOf(webhookResponse.data) as WebhookRow[]);
-      setEvents(rowsOf(eventResponse.data) as DomainEventRow[]);
-      setDeliveries(rowsOf(deliveryResponse.data) as WebhookDeliveryRow[]);
+      const { connectorData, syncData, dispatchData, webhookData, eventData, deliveryData } = await operationsApi.integrations.load();
+      setConnectors(rowsOf(connectorData) as ConnectorRow[]);
+      setSyncRuns(rowsOf(syncData) as SyncRunRow[]);
+      setDispatchLogs(rowsOf(dispatchData) as DispatchLogRow[]);
+      setWebhooks(rowsOf(webhookData) as WebhookRow[]);
+      setEvents(rowsOf(eventData) as DomainEventRow[]);
+      setDeliveries(rowsOf(deliveryData) as WebhookDeliveryRow[]);
     } catch (error) {
       message.error(parseApiError(error, "Failed to load integrations center"));
     } finally {
@@ -162,7 +155,7 @@ export default function IntegrationsCenter() {
               icon={<RocketOutlined />}
               onClick={async () => {
                 try {
-                  await apiClient.post(`/api/common/integration-connectors/${row.id}/sync/`, { direction: "EXPORT" });
+                  await operationsApi.integrations.queueConnectorSync(row.id);
                   message.success("Sync queued");
                   await loadAll();
                 } catch (error) {
@@ -197,7 +190,7 @@ export default function IntegrationsCenter() {
             title="Delete this connector?"
             onConfirm={async () => {
               try {
-                await apiClient.delete(`/api/common/integration-connectors/${row.id}/`);
+                await operationsApi.integrations.deleteConnector(row.id);
                 message.success("Connector deleted");
                 await loadAll();
               } catch (error) {
@@ -265,7 +258,7 @@ export default function IntegrationsCenter() {
             title="Delete this webhook endpoint?"
             onConfirm={async () => {
               try {
-                await apiClient.delete(`/api/common/webhook-endpoints/${row.id}/`);
+                await operationsApi.integrations.deleteWebhook(row.id);
                 message.success("Webhook deleted");
                 await loadAll();
               } catch (error) {
@@ -365,7 +358,7 @@ export default function IntegrationsCenter() {
               <Button
                 onClick={async () => {
                   try {
-                    await apiClient.post("/api/common/integration-connectors/dispatch-pending-events/", {});
+                    await operationsApi.integrations.dispatchPendingEvents();
                     message.success("Pending events queued for dispatch");
                     await loadAll();
                   } catch (error) {
@@ -427,11 +420,7 @@ export default function IntegrationsCenter() {
                 settings_json: values.settings_json?.trim() ? JSON.parse(values.settings_json) : {},
                 is_active: values.is_active,
               };
-              if (editingConnector) {
-                await apiClient.patch(`/api/common/integration-connectors/${editingConnector.id}/`, payload);
-              } else {
-                await apiClient.post("/api/common/integration-connectors/", payload);
-              }
+              await operationsApi.integrations.saveConnector(payload, editingConnector?.id);
               message.success(editingConnector ? "Connector updated" : "Connector created");
               setConnectorOpen(false);
               await loadAll();
@@ -482,11 +471,7 @@ export default function IntegrationsCenter() {
                 max_retries: values.max_retries,
                 is_active: values.is_active,
               };
-              if (editingWebhook) {
-                await apiClient.patch(`/api/common/webhook-endpoints/${editingWebhook.id}/`, payload);
-              } else {
-                await apiClient.post("/api/common/webhook-endpoints/", payload);
-              }
+              await operationsApi.integrations.saveWebhook(payload, editingWebhook?.id);
               message.success(editingWebhook ? "Webhook updated" : "Webhook created");
               setWebhookOpen(false);
               await loadAll();

@@ -2,7 +2,7 @@ import { UploadOutlined } from "@ant-design/icons";
 import { Button, Progress, Typography, Upload, message } from "antd";
 import type { UploadFile } from "antd/es/upload/interface";
 import { useState } from "react";
-import apiClient from "@/services/apiClient";
+import { uploadFileAsset } from "@/features/files/fileAssetsApi";
 import { parseApiError } from "@/utils/platform";
 
 type UploadedAsset = {
@@ -76,18 +76,15 @@ export default function FileAssetUploader({
           setProgress(0);
 
           try {
-            const formData = new FormData();
-            formData.append("purpose", purpose);
-            formData.append("file", file);
-            const response = await apiClient.post("/api/common/file-assets/", formData, {
-              headers: { "Content-Type": "multipart/form-data" },
-              onUploadProgress: (event) => {
-                if (!event.total) return;
-                setProgress(Math.round((event.loaded / event.total) * 100));
+            const response = await uploadFileAsset({
+              purpose,
+              file,
+              onProgress: (percent) => {
+                setProgress(percent);
               },
             });
 
-            onUploaded(response.data as UploadedAsset);
+            onUploaded(response as UploadedAsset);
             message.success("File uploaded");
             setFileList([]);
             setProgress(100);

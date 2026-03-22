@@ -2,7 +2,7 @@ import { ArrowLeftOutlined, MailOutlined, SafetyOutlined } from "@ant-design/ico
 import { Button, Card, Form, Input, Typography, message } from "antd";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { api } from "@/services/api";
+import { authApi } from "@/features/auth/authApi";
 import { parseApiError } from "@/utils/platform";
 
 type Values = {
@@ -57,7 +57,7 @@ export default function ForgotPassword() {
             onFinish={async ({ email, schoolCode }) => {
               setSubmitting(true);
               try {
-                await api.passwordReset.request({ email, tenant_code: schoolCode || "" });
+                await authApi.passwordReset.request({ email, tenant_code: schoolCode || "" });
                 setSubmitted(true);
               } catch (error) {
                 message.error(parseApiError(error, "Request failed"));

@@ -4,7 +4,9 @@ import type { ColumnsType } from "antd/es/table";
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import BulkCampaignCenter from "@/features/communications/BulkCampaignCenter";
-import apiClient from "@/services/apiClient";
+import { communicationsApi } from "@/features/communications/communicationsApi";
+import { useGetAdminUsersQuery } from "@/features/admin/adminApiSlice";
+import { rowsOf } from "@/utils/platform";
 
 type Role =
   | "SUPER_ADMIN"
@@ -32,7 +34,6 @@ type AnnouncementForm = { title: string; body: string; target_roles?: string[]; 
 type NotificationForm = { user: number; title: string; body?: string; channel: string; status: string; scheduled_at?: string; payload?: string };
 type ParticipantForm = { user: number };
 
-const rowsOf = <T,>(data?: Paginated<T> | T[]) => (Array.isArray(data) ? data : Array.isArray(data?.results) ? data.results : []);
 const dt = (value?: string | null) => (value ? new Date(value).toLocaleString() : "-");
 
 function getRole(): Role | undefined {
@@ -57,7 +58,6 @@ export default function CommunicationsPage() {
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [messagesData, setMessagesData] = useState<MessageRow[]>([]);
   const [notifications, setNotifications] = useState<NotificationRow[]>([]);
-  const [users, setUsers] = useState<User[]>([]);
   const [unread, setUnread] = useState<Unread>({ unread: 0, by_channel: [] });
   const [selectedThreadId, setSelectedThreadId] = useState<number | null>(null);
   const [threadOpen, setThreadOpen] = useState(false);
@@ -71,31 +71,33 @@ export default function CommunicationsPage() {
   const [announcementForm] = Form.useForm<AnnouncementForm>();
   const [notificationForm] = Form.useForm<NotificationForm>();
   const [participantForm] = Form.useForm<ParticipantForm>();
+  const {
+    data: usersData,
+    isFetching: usersLoading,
+    refetch: refetchUsers,
+  } = useGetAdminUsersQuery({ page: 1, page_size: 200 });
+  const users = rowsOf(usersData) as User[];
 
   const loadAll = async () => {
     setLoading(true);
     try {
-      const settled = await Promise.allSettled([
-        apiClient.get("/api/communications/announcements/", { params: { page: 1, page_size: 100 } }),
-        apiClient.get("/api/communications/message-threads/", { params: { page: 1, page_size: 100 } }),
-        apiClient.get("/api/communications/message-participants/", { params: { page: 1, page_size: 200 } }),
-        apiClient.get("/api/communications/messages/", { params: { page: 1, page_size: 300 } }),
-        apiClient.get("/api/communications/notifications/", { params: { page: 1, page_size: 100 } }),
-        apiClient.get("/api/communications/notifications/unread-count/"),
-        apiClient.get("/api/accounts/users/", { params: { page: 1, page_size: 200 } }),
-      ]);
+      const {
+        announcementsData,
+        threadsData,
+        participantsData,
+        messagesData: nextMessagesData,
+        notificationsData,
+        unreadData,
+      } = await communicationsApi.loadWorkspace();
 
-      const valueAt = <T,>(index: number, fallback: T) => (settled[index].status === "fulfilled" ? (settled[index] as PromiseFulfilledResult<{ data: T }>).value.data : fallback);
-
-      setAnnouncements(rowsOf<Announcement>(valueAt(0, [] as Announcement[])));
-      setThreads(rowsOf<Thread>(valueAt(1, [] as Thread[])));
-      setParticipants(rowsOf<Participant>(valueAt(2, [] as Participant[])));
-      setMessagesData(rowsOf<MessageRow>(valueAt(3, [] as MessageRow[])));
-      setNotifications(rowsOf<NotificationRow>(valueAt(4, [] as NotificationRow[])));
-      setUnread(valueAt(5, { unread: 0, by_channel: [] }));
-      setUsers(rowsOf<User>(valueAt(6, [] as User[])));
-    } catch (error: any) {
-      message.error(error?.response?.data?.detail ?? "Failed to load communications workspace");
+      setAnnouncements(rowsOf<Announcement>(announcementsData as Paginated<Announcement> | Announcement[]));
+      setThreads(rowsOf<Thread>(threadsData as Paginated<Thread> | Thread[]));
+      setParticipants(rowsOf<Participant>(participantsData as Paginated<Participant> | Participant[]));
+      setMessagesData(rowsOf<MessageRow>(nextMessagesData as Paginated<MessageRow> | MessageRow[]));
+      setNotifications(rowsOf<NotificationRow>(notificationsData as Paginated<NotificationRow> | NotificationRow[]));
+      setUnread(unreadData as Unread);
+    } catch (error) {
+      message.error("Failed to load communications workspace");
     } finally {
       setLoading(false);
     }
@@ -170,7 +172,7 @@ export default function CommunicationsPage() {
     const values = await replyForm.validateFields();
     setSubmitting(true);
     try {
-      await apiClient.post("/api/communications/messages/", { thread: selectedThreadId, body: values.body, attachment_url: values.attachment_url ?? "", status: values.status });
+      await communicationsApi.sendMessage({ thread: selectedThreadId, body: values.body, attachment_url: values.attachment_url ?? "", status: values.status });
       message.success("Message sent");
       replyForm.resetFields();
       replyForm.setFieldsValue({ status: "SENT" });
@@ -186,13 +188,13 @@ export default function CommunicationsPage() {
     const values = await threadForm.validateFields();
     setSubmitting(true);
     try {
-      const response = await apiClient.post("/api/communications/message-threads/", { subject: values.subject ?? "", is_group: values.is_group ?? false });
-      const threadId = response.data.id as number;
+      const response = await communicationsApi.createThread({ subject: values.subject ?? "", is_group: values.is_group ?? false });
+      const threadId = (response as { id: number }).id;
       for (const participantId of values.participant_ids ?? []) {
-        await apiClient.post("/api/communications/message-participants/", { thread: threadId, user: participantId });
+        await communicationsApi.addParticipant({ thread: threadId, user: participantId });
       }
       if (values.initial_message?.trim()) {
-        await apiClient.post("/api/communications/messages/", { thread: threadId, body: values.initial_message.trim(), status: "SENT" });
+        await communicationsApi.sendMessage({ thread: threadId, body: values.initial_message.trim(), status: "SENT" });
       }
       message.success("Thread created");
       setThreadOpen(false);
@@ -210,7 +212,7 @@ export default function CommunicationsPage() {
     const values = await announcementForm.validateFields();
     setSubmitting(true);
     try {
-      await apiClient.post("/api/communications/announcements/", values);
+      await communicationsApi.createAnnouncement(values);
       message.success("Announcement published");
       setAnnouncementOpen(false);
       announcementForm.resetFields();
@@ -227,7 +229,7 @@ export default function CommunicationsPage() {
     const values = await participantForm.validateFields();
     setSubmitting(true);
     try {
-      await apiClient.post("/api/communications/message-participants/", { thread: selectedThreadId, user: values.user });
+      await communicationsApi.addParticipant({ thread: selectedThreadId, user: values.user });
       message.success("Participant added");
       setParticipantOpen(false);
       participantForm.resetFields();
@@ -243,7 +245,7 @@ export default function CommunicationsPage() {
     const values = await notificationForm.validateFields();
     setSubmitting(true);
     try {
-      await apiClient.post("/api/communications/notifications/", {
+      await communicationsApi.createNotification({
         user: values.user,
         title: values.title,
         body: values.body ?? "",
@@ -278,7 +280,12 @@ export default function CommunicationsPage() {
         </div>
         <Space wrap>
           <Tag color="blue">{role ?? "UNKNOWN"}</Tag>
-          <Button className="!rounded-2xl" icon={<ReloadOutlined />} onClick={() => void loadAll()} loading={loading}>
+          <Button
+            className="!rounded-2xl"
+            icon={<ReloadOutlined />}
+            onClick={() => void Promise.all([loadAll(), refetchUsers()])}
+            loading={loading || usersLoading}
+          >
             Refresh
           </Button>
           {canThread ? (

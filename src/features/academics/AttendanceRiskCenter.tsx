@@ -2,7 +2,10 @@ import { AlertOutlined, DownloadOutlined, ReloadOutlined } from "@ant-design/ico
 import { Button, Card, Col, Form, Input, InputNumber, Modal, Row, Select, Space, Statistic, Switch, Table, Tabs, Tag, Typography, message } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useEffect, useMemo, useState } from "react";
-import apiClient from "@/services/apiClient";
+import { useGetAdminUsersQuery } from "@/features/admin/adminApiSlice";
+import { academicOperationsApi } from "@/features/academics/academicOperationsApi";
+import { useGetGradeLevelsQuery, useGetSectionsQuery } from "@/features/institutions/institutionsApiSlice";
+import { useGetStudentsQuery } from "@/features/students/studentsApiSlice";
 import { downloadPostFromApi, formatDate, formatDateTime, parseApiError, rowsOf } from "@/utils/platform";
 
 type Student = { id: number; student_id?: string; first_name?: string; last_name?: string };
@@ -98,6 +101,10 @@ export default function AttendanceRiskCenter() {
   const [reportForm] = Form.useForm<ReportFormValues>();
   const [evaluationForm] = Form.useForm<EvaluationFormValues>();
   const [transitionForm] = Form.useForm<TransitionFormValues>();
+  const { data: studentsData, isFetching: studentsLoading, refetch: refetchStudents } = useGetStudentsQuery({ page: 1, page_size: 200 });
+  const { data: sectionsData, isFetching: sectionsLoading, refetch: refetchSections } = useGetSectionsQuery({ page: 1, page_size: 200 });
+  const { data: gradeLevelsData, isFetching: gradeLevelsLoading, refetch: refetchGradeLevels } = useGetGradeLevelsQuery({ page: 1, page_size: 200 });
+  const { data: usersData, isFetching: usersLoading, refetch: refetchUsers } = useGetAdminUsersQuery({ page: 1, page_size: 200 });
 
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -116,22 +123,8 @@ export default function AttendanceRiskCenter() {
   const loadAll = async () => {
     setLoading(true);
     try {
-      const settled = await Promise.allSettled([
-        apiClient.get("/api/students/students/", { params: { page: 1, page_size: 200 } }),
-        apiClient.get("/api/institutions/sections/", { params: { page: 1, page_size: 200 } }),
-        apiClient.get("/api/institutions/grade-levels/", { params: { page: 1, page_size: 200 } }),
-        apiClient.get("/api/accounts/users/", { params: { page: 1, page_size: 200 } }),
-        apiClient.get("/api/academics/attendance-risk-flags/", { params: { page: 1, page_size: 200 } }),
-      ]);
-
-      const valueAt = <T,>(index: number, fallback: T) =>
-        settled[index].status === "fulfilled" ? (settled[index] as PromiseFulfilledResult<{ data: T }>).value.data : fallback;
-
-      setStudents(rowsOf(valueAt(0, [] as Student[])) as Student[]);
-      setSections(rowsOf(valueAt(1, [] as Section[])) as Section[]);
-      setGradeLevels(rowsOf(valueAt(2, [] as GradeLevel[])) as GradeLevel[]);
-      setUsers(rowsOf(valueAt(3, [] as User[])) as User[]);
-      const nextFlags = rowsOf(valueAt(4, [] as Flag[])) as Flag[];
+      const { flagData } = await academicOperationsApi.attendanceRisk.load();
+      const nextFlags = rowsOf(flagData) as Flag[];
       setFlags(nextFlags);
       if (!selectedFlagId && nextFlags.length) {
         setSelectedFlagId(nextFlags[0].id);
@@ -145,8 +138,8 @@ export default function AttendanceRiskCenter() {
 
   const loadHistory = async (flagId: number) => {
     try {
-      const response = await apiClient.get(`/api/academics/attendance-risk-flags/${flagId}/history/`);
-      setHistoryRows(Array.isArray(response.data) ? (response.data as ActionRow[]) : []);
+      const response = await academicOperationsApi.attendanceRisk.getHistory(flagId);
+      setHistoryRows(Array.isArray(response) ? (response as ActionRow[]) : []);
     } catch (error) {
       message.error(parseApiError(error, "Unable to load attendance risk history"));
     }
@@ -157,6 +150,28 @@ export default function AttendanceRiskCenter() {
     evaluationForm.setFieldsValue({ threshold_percentage: 75, min_records: 5, auto_resolve: true, window_days: 30 });
     void loadAll();
   }, []);
+
+  useEffect(() => {
+    setStudents(rowsOf(studentsData) as Student[]);
+  }, [studentsData]);
+
+  useEffect(() => {
+    setSections(rowsOf(sectionsData) as Section[]);
+  }, [sectionsData]);
+
+  useEffect(() => {
+    setGradeLevels(rowsOf(gradeLevelsData) as GradeLevel[]);
+  }, [gradeLevelsData]);
+
+  useEffect(() => {
+    setUsers(rowsOf(usersData) as User[]);
+  }, [usersData]);
+
+  const pageLoading = loading || studentsLoading || sectionsLoading || gradeLevelsLoading || usersLoading;
+
+  const refreshAll = async () => {
+    await Promise.all([loadAll(), refetchStudents(), refetchSections(), refetchGradeLevels(), refetchUsers()]);
+  };
 
   useEffect(() => {
     if (selectedFlagId) {
@@ -198,7 +213,7 @@ export default function AttendanceRiskCenter() {
           {row.status === "RESOLVED" || row.status === "DISMISSED" ? <Button size="small" loading={actionKey === `reopen-${row.id}`} onClick={async () => {
             setActionKey(`reopen-${row.id}`);
             try {
-              await apiClient.post(`/api/academics/attendance-risk-flags/${row.id}/reopen/`, {});
+              await academicOperationsApi.attendanceRisk.reopenFlag(row.id);
               message.success("Flag reopened");
               await loadAll();
               setSelectedFlagId(row.id);
@@ -232,7 +247,7 @@ export default function AttendanceRiskCenter() {
             Sprint 10 section attendance reporting, risk evaluation, escalation workflow, and audit history.
           </Typography.Paragraph>
         </div>
-        <Button icon={<ReloadOutlined />} onClick={() => void loadAll()} loading={loading}>
+        <Button icon={<ReloadOutlined />} onClick={() => void refreshAll()} loading={pageLoading}>
           Refresh
         </Button>
       </div>
@@ -284,8 +299,8 @@ export default function AttendanceRiskCenter() {
                           try {
                             const values = await reportForm.validateFields();
                             setSubmitting(true);
-                            const response = await apiClient.post("/api/academics/attendance-records/section-report/", { ...values, export_format: "JSON" });
-                            setReport(response.data as ReportPayload);
+                            const response = await academicOperationsApi.attendanceRisk.runSectionReport({ ...values, export_format: "JSON" });
+                            setReport(response as ReportPayload);
                             message.success("Attendance report loaded");
                           } catch (error) {
                             message.error(parseApiError(error, "Unable to run attendance report"));
@@ -407,8 +422,8 @@ export default function AttendanceRiskCenter() {
                               ...values,
                               window_days: values.start_date && values.end_date ? undefined : values.window_days,
                             };
-                            const response = await apiClient.post("/api/academics/attendance-risk-flags/evaluate/", payload);
-                            setEvaluationSummary(response.data as EvaluationSummary);
+                            const response = await academicOperationsApi.attendanceRisk.evaluateFlags(payload);
+                            setEvaluationSummary(response as EvaluationSummary);
                             message.success("Attendance risk evaluation completed");
                             await loadAll();
                           } catch (error) {
@@ -439,7 +454,7 @@ export default function AttendanceRiskCenter() {
 
                   <Card className="!bg-[var(--cv-card)] !border-white/10 !rounded-3xl">
                     <div className="text-white font-medium mb-3">Attendance Risk Flags</div>
-                    <Table rowKey="id" loading={loading} dataSource={flags} columns={flagColumns} pagination={{ pageSize: 6 }} />
+                    <Table rowKey="id" loading={pageLoading} dataSource={flags} columns={flagColumns} pagination={{ pageSize: 6 }} />
                   </Card>
                 </div>
 
@@ -494,7 +509,7 @@ export default function AttendanceRiskCenter() {
             if (!transitionTarget) return;
             setSubmitting(true);
             try {
-              await apiClient.post(`/api/academics/attendance-risk-flags/${transitionTarget.id}/${transitionTarget.action}/`, values);
+              await academicOperationsApi.attendanceRisk.transitionFlag(transitionTarget.id, transitionTarget.action, values);
               message.success(
                 transitionTarget.action === "dismiss"
                   ? "Flag dismissed"

@@ -1,8 +1,9 @@
 import { Card, Input, Select, Space, Spin, Table, Tag, Typography, message } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useEffect, useMemo, useState } from "react";
-import { academicsApi } from "../academicsApi";
-import type { AssessmentResultRow, AssessmentRow, Paginated } from "../academicsTypes";
+import { useGetAssessmentsQuery, useGetAssessmentResultsQuery } from "../academicsApiSlice";
+import type { AssessmentResultRow, AssessmentRow } from "../academicsTypes";
+import { rowsOf } from "@/utils/platform";
 
 type TabProps = {
   defaultSearch?: string;
@@ -18,75 +19,31 @@ const feedbackTagColor = (s?: string) => {
 };
 
 export default function AssessmentResultsTab({ defaultSearch }: TabProps) {
-  const [loading, setLoading] = useState(false);
-  const [rows, setRows] = useState<AssessmentResultRow[]>([]);
-
   const [page, setPage] = useState(1);
   const [pageSize] = useState(25);
-  const [total, setTotal] = useState(0);
 
   const [searchInput, setSearchInput] = useState(defaultSearch ?? "");
   const [search, setSearch] = useState(defaultSearch ?? "");
 
-  const [assessments, setAssessments] = useState<AssessmentRow[]>([]);
   const [assessmentId, setAssessmentId] = useState<number | "ALL">("ALL");
-  const [assessmentsLoading, setAssessmentsLoading] = useState(false);
 
-  const loadAssessments = async () => {
-    setAssessmentsLoading(true);
-    try {
-      const data = await academicsApi.assessments.list({ page: 1, page_size: 200 });
-      const list = ((data as any)?.results ?? []) as AssessmentRow[];
-      setAssessments(list);
-    } catch (e: any) {
-      message.error(e?.response?.data?.detail ?? "Failed to load assessments");
-    } finally {
-      setAssessmentsLoading(false);
-    }
-  };
+  const { data: assessmentsData, isFetching: assessmentsLoading } = useGetAssessmentsQuery({ page: 1, page_size: 200 });
+  const assessments = (rowsOf(assessmentsData) as AssessmentRow[]) || [];
 
-  useEffect(() => {
-    void loadAssessments();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const selectedAssessment = assessments.find((a) => a.id === assessmentId);
+  const query =
+    assessmentId !== "ALL" && selectedAssessment?.title
+      ? selectedAssessment.title
+      : search || undefined;
 
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      setLoading(true);
-      try {
-        // The backend searches by:
-        // - assessment__title
-        // - enrollment__student__student_id
-        // so if you select an assessment, we use its title to search.
-        const selectedAssessment = assessments.find((a) => a.id === assessmentId);
-        const query =
-          assessmentId !== "ALL" && selectedAssessment?.title
-            ? selectedAssessment.title
-            : search || undefined;
+  const { data: resultsData, isFetching: loading } = useGetAssessmentResultsQuery({
+    search: query,
+    page,
+    page_size: pageSize,
+  });
 
-        const data = await academicsApi.assessmentResults.list({
-          search: query,
-          page,
-          page_size: pageSize,
-        });
-        if (!mounted) return;
-
-        const paginated = data as Paginated<AssessmentResultRow>;
-        const list =
-          Array.isArray((data as any)?.results) ? (data as any).results : Array.isArray(data) ? (data as any) : [];
-        setRows(list);
-        setTotal(typeof paginated?.count === "number" ? paginated.count : list.length);
-      } catch (e: any) {
-        message.error(e?.response?.data?.detail ?? "Failed to load assessment results");
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    })();
-    return () => {
-      mounted = false;
-    };
-  }, [page, pageSize, search, assessmentId, assessments]);
+  const rows = rowsOf(resultsData) as AssessmentResultRow[];
+  const total = typeof resultsData?.count === "number" ? resultsData.count : rows.length;
 
   useEffect(() => {
     setPage(1);

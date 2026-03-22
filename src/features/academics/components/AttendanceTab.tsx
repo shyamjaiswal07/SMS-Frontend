@@ -1,8 +1,9 @@
-import { Card, Drawer, Input, Space, Spin, Table, Tag, Typography, message } from "antd";
+import { Card, Drawer, Input, Space, Spin, Table, Tag, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
-import { useEffect, useMemo, useState } from "react";
-import { academicsApi } from "../academicsApi";
-import type { AttendanceRecordRow, AttendanceSessionRow, Paginated } from "../academicsTypes";
+import { useMemo, useState } from "react";
+import { useGetAttendanceSessionsQuery, useGetAttendanceRecordsQuery } from "../academicsApiSlice";
+import type { AttendanceRecordRow, AttendanceSessionRow } from "../academicsTypes";
+import { rowsOf } from "@/utils/platform";
 
 const statusTagColor = (s?: string) => {
   switch (s) {
@@ -38,72 +39,38 @@ const scheduleLabelFromSession = (s: AttendanceSessionRow) => {
 };
 
 export default function AttendanceTab() {
-  const [loading, setLoading] = useState(false);
-  const [sessions, setSessions] = useState<AttendanceSessionRow[]>([]);
   const [page, setPage] = useState(1);
   const [pageSize] = useState(25);
-  const [total, setTotal] = useState(0);
 
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
 
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [selectedSession, setSelectedSession] = useState<AttendanceSessionRow | null>(null);
-  const [drawerLoading, setDrawerLoading] = useState(false);
-  const [records, setRecords] = useState<AttendanceRecordRow[]>([]);
 
-  const loadSessions = async () => {
-    setLoading(true);
-    try {
-      const data = await academicsApi.attendanceSessions.list({ search: search || undefined, page, page_size: pageSize });
-      const paginated = data as Paginated<AttendanceSessionRow>;
-      const list = Array.isArray((data as any)?.results)
-        ? (data as any).results
-        : Array.isArray(data)
-          ? data
-          : [];
-      setSessions(list);
-      setTotal(typeof paginated?.count === "number" ? paginated.count : list.length);
-    } catch (e: any) {
-      message.error(e?.response?.data?.detail ?? "Failed to load attendance sessions");
-    } finally {
-      setLoading(false);
-    }
-  };
+  const { data: sessionsData, isFetching: loading } = useGetAttendanceSessionsQuery({
+    search: search || undefined,
+    page,
+    page_size: pageSize,
+  });
 
-  useEffect(() => {
-    void loadSessions();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, pageSize, search]);
+  const sessions = rowsOf(sessionsData) as AttendanceSessionRow[];
+  const total = typeof sessionsData?.count === "number" ? sessionsData.count : sessions.length;
 
-  const openSession = async (s: AttendanceSessionRow) => {
+  const { data: recordsData, isFetching: drawerLoading } = useGetAttendanceRecordsQuery(
+    { search: selectedSession ? String(scheduleLabelFromSession(selectedSession)) : undefined, page: 1, page_size: 200 },
+    { skip: !selectedSession || !drawerOpen },
+  );
+
+  const records = useMemo(() => {
+    if (!selectedSession || !recordsData) return [];
+    const list = rowsOf(recordsData) as AttendanceRecordRow[];
+    return list.filter((r: any) => Number(r.session) === Number(selectedSession.id));
+  }, [recordsData, selectedSession]);
+
+  const openSession = (s: AttendanceSessionRow) => {
     setSelectedSession(s);
     setDrawerOpen(true);
-    setDrawerLoading(true);
-    setRecords([]);
-
-    const scheduleLabel = scheduleLabelFromSession(s);
-    const searchQuery = typeof scheduleLabel === "string" ? scheduleLabel : String(scheduleLabel);
-
-    try {
-      const data = await academicsApi.attendanceRecords.list({
-        search: searchQuery || undefined,
-        page: 1,
-        page_size: 200,
-      });
-      const list = Array.isArray((data as any)?.results)
-        ? (data as any).results
-        : Array.isArray(data)
-          ? data
-          : [];
-
-      const filtered = list.filter((r: any) => Number(r.session) === Number(s.id));
-      setRecords(filtered);
-    } catch (e: any) {
-      message.error(e?.response?.data?.detail ?? "Failed to load attendance records");
-    } finally {
-      setDrawerLoading(false);
-    }
   };
 
   const columns: ColumnsType<AttendanceSessionRow> = useMemo(

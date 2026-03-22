@@ -1,96 +1,82 @@
 import apiClient from "@/services/apiClient";
 
-export type Paginated<T> = {
-  count?: number;
-  next?: string | null;
-  previous?: string | null;
-  results?: T[];
-};
+type QueryParams = Record<string, unknown>;
 
-export type AnnouncementRow = {
-  id: number;
-  title: string;
-  body: string;
-  target_roles?: string[];
-  publish_at?: string | null;
-  expire_at?: string | null;
-  is_pinned?: boolean;
-  published_by?: number | null;
-};
+async function get(url: string, params?: QueryParams) {
+  const response = await apiClient.get(url, params ? { params } : undefined);
+  return response.data;
+}
 
-export type ThreadRow = {
-  id: number;
-  subject?: string;
-  created_by?: number | null;
-  is_group?: boolean;
-  created_at?: string;
-};
-
-export type ParticipantRow = {
-  id: number;
-  thread: number;
-  user: number;
-  is_muted?: boolean;
-  last_read_at?: string | null;
-};
-
-export type MessageRow = {
-  id: number;
-  thread: number;
-  sender?: number | null;
-  body: string;
-  attachment_url?: string;
-  status?: string;
-  created_at?: string;
-};
-
-export type NotificationRow = {
-  id: number;
-  user: number;
-  title: string;
-  body?: string;
-  channel?: string;
-  status?: string;
-  scheduled_at?: string | null;
-  sent_at?: string | null;
-  read_at?: string | null;
-};
-
-export type UnreadCount = {
-  unread: number;
-  by_channel: Array<{ channel: string; total: number }>;
-};
-
-const get = async <T>(url: string, params?: Record<string, unknown>) => {
-  const res = await apiClient.get<T>(url, { params });
-  return res.data;
-};
-
-const post = async <T>(url: string, payload: Record<string, unknown>) => {
-  const res = await apiClient.post<T>(url, payload);
-  return res.data;
-};
+async function post(url: string, payload?: unknown) {
+  const response = await apiClient.post(url, payload ?? {});
+  return response.data;
+}
 
 export const communicationsApi = {
-  announcements: {
-    list: (params?: Record<string, unknown>) => get<Paginated<AnnouncementRow>>(`/api/communications/announcements/`, params),
-    create: (payload: Record<string, unknown>) => post<AnnouncementRow>(`/api/communications/announcements/`, payload),
+  async loadWorkspace() {
+    const settled = await Promise.allSettled([
+      get("/api/communications/announcements/", { page: 1, page_size: 100 }),
+      get("/api/communications/message-threads/", { page: 1, page_size: 100 }),
+      get("/api/communications/message-participants/", { page: 1, page_size: 200 }),
+      get("/api/communications/messages/", { page: 1, page_size: 300 }),
+      get("/api/communications/notifications/", { page: 1, page_size: 100 }),
+      get("/api/communications/notifications/unread-count/"),
+    ]);
+
+    const valueAt = <T,>(index: number, fallback: T) =>
+      settled[index].status === "fulfilled"
+        ? (settled[index] as PromiseFulfilledResult<T>).value
+        : fallback;
+
+    return {
+      announcementsData: valueAt(0, [] as unknown[]),
+      threadsData: valueAt(1, [] as unknown[]),
+      participantsData: valueAt(2, [] as unknown[]),
+      messagesData: valueAt(3, [] as unknown[]),
+      notificationsData: valueAt(4, [] as unknown[]),
+      unreadData: valueAt(5, { unread: 0, by_channel: [] }),
+    };
   },
-  threads: {
-    list: (params?: Record<string, unknown>) => get<Paginated<ThreadRow>>(`/api/communications/message-threads/`, params),
-    create: (payload: Record<string, unknown>) => post<ThreadRow>(`/api/communications/message-threads/`, payload),
+  sendMessage(payload: Record<string, unknown>) {
+    return post("/api/communications/messages/", payload);
   },
-  participants: {
-    list: (params?: Record<string, unknown>) => get<Paginated<ParticipantRow>>(`/api/communications/message-participants/`, params),
-    create: (payload: Record<string, unknown>) => post<ParticipantRow>(`/api/communications/message-participants/`, payload),
+  createThread(payload: Record<string, unknown>) {
+    return post("/api/communications/message-threads/", payload);
   },
-  messages: {
-    list: (params?: Record<string, unknown>) => get<Paginated<MessageRow>>(`/api/communications/messages/`, params),
-    create: (payload: Record<string, unknown>) => post<MessageRow>(`/api/communications/messages/`, payload),
+  addParticipant(payload: Record<string, unknown>) {
+    return post("/api/communications/message-participants/", payload);
   },
-  notifications: {
-    list: (params?: Record<string, unknown>) => get<Paginated<NotificationRow>>(`/api/communications/notifications/`, params),
-    create: (payload: Record<string, unknown>) => post<NotificationRow>(`/api/communications/notifications/`, payload),
-    unreadCount: () => get<UnreadCount>(`/api/communications/notifications/unread-count/`),
+  createAnnouncement(payload: Record<string, unknown>) {
+    return post("/api/communications/announcements/", payload);
+  },
+  createNotification(payload: Record<string, unknown>) {
+    return post("/api/communications/notifications/", payload);
+  },
+  async loadBulkCampaigns() {
+    return get("/api/communications/bulk-campaigns/", { page: 1, page_size: 200 });
+  },
+  queueCampaign(id: number, dispatchNow: boolean) {
+    return post(`/api/communications/bulk-campaigns/${id}/queue/`, { dispatch_now: dispatchNow });
+  },
+  retryFailedCampaign(id: number, dispatchNow: boolean) {
+    return post(`/api/communications/bulk-campaigns/${id}/retry-failed/`, { dispatch_now: dispatchNow });
+  },
+  previewCampaignAudience(id: number) {
+    return get(`/api/communications/bulk-campaigns/${id}/audience-preview/`);
+  },
+  refreshCampaignStatus(id: number) {
+    return post(`/api/communications/bulk-campaigns/${id}/refresh-status/`, {});
+  },
+  getCampaignStats(id: number) {
+    return get(`/api/communications/bulk-campaigns/${id}/stats/`);
+  },
+  getCampaignRecipients(id: number) {
+    return get(`/api/communications/bulk-campaigns/${id}/recipients/`);
+  },
+  cancelCampaign(id: number) {
+    return post(`/api/communications/bulk-campaigns/${id}/cancel/`, {});
+  },
+  createCampaign(payload: Record<string, unknown>) {
+    return post("/api/communications/bulk-campaigns/", payload);
   },
 };

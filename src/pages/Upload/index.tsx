@@ -1,7 +1,7 @@
 import { Button, Card, Typography, Upload as AntUpload, message } from "antd";
 import type { UploadProps } from "antd";
 import { useParams } from "react-router-dom";
-import { api } from "@/services/api";
+import { uploadApi } from "./uploadApi";
 
 export default function Upload() {
   const { lotId } = useParams();
@@ -9,11 +9,7 @@ export default function Upload() {
   const props: UploadProps = {
     beforeUpload: async (file) => {
       try {
-        const form = new FormData();
-        form.append("file", file);
-        if (lotId) form.append("lot_id", lotId);
-
-        await api.lotDetails(form);
+        await uploadApi.uploadLotDetail(file, lotId);
         message.success("Uploaded");
       } catch (e: any) {
         message.error(e?.response?.data?.detail ?? "Upload failed");

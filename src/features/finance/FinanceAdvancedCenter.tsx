@@ -2,7 +2,7 @@ import { EyeOutlined, FileSearchOutlined, FundProjectionScreenOutlined } from "@
 import { Button, Card, Col, Form, Input, InputNumber, Modal, Row, Select, Space, Table, Tabs, Tag, Typography, message } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useEffect, useMemo, useState } from "react";
-import apiClient from "@/services/apiClient";
+import { financeApi } from "@/features/finance/financeApi";
 import { fetchHtmlFromApi, formatDate, formatDateTime, openHtmlPreview, parseApiError, rowsOf } from "@/utils/platform";
 
 type LedgerAccount = { id: number; code: string; name: string; account_type: string };
@@ -68,26 +68,23 @@ export default function FinanceAdvancedCenter() {
   const loadAll = async () => {
     setLoading(true);
     try {
-      const settled = await Promise.allSettled([
-        apiClient.get("/api/finance/ledger-accounts/", { params: { page: 1, page_size: 200 } }),
-        apiClient.get("/api/finance/financial-statement-snapshots/", { params: { page: 1, page_size: 100 } }),
-        apiClient.get("/api/finance/budget-plans/", { params: { page: 1, page_size: 100 } }),
-        apiClient.get("/api/finance/budget-lines/", { params: { page: 1, page_size: 200 } }),
-        apiClient.get("/api/finance/budget-approval-history/", { params: { page: 1, page_size: 200 } }),
-        apiClient.get("/api/finance/invoices/", { params: { page: 1, page_size: 100 } }),
-        apiClient.get("/api/finance/payments/", { params: { page: 1, page_size: 100 } }),
-      ]);
+      const {
+        ledgerAccountData,
+        snapshotData,
+        budgetPlanData,
+        budgetLineData,
+        approvalHistoryData,
+        invoiceData,
+        paymentData,
+      } = await financeApi.loadAdvancedCenter();
 
-      const valueAt = <T,>(index: number, fallback: T) =>
-        settled[index].status === "fulfilled" ? (settled[index] as PromiseFulfilledResult<{ data: T }>).value.data : fallback;
-
-      setAccounts(rowsOf(valueAt(0, [] as LedgerAccount[])) as LedgerAccount[]);
-      setSnapshots(rowsOf(valueAt(1, [] as SnapshotRow[])) as SnapshotRow[]);
-      setBudgetPlans(rowsOf(valueAt(2, [] as BudgetPlan[])) as BudgetPlan[]);
-      setBudgetLines(rowsOf(valueAt(3, [] as BudgetLine[])) as BudgetLine[]);
-      setBudgetApprovalHistory(rowsOf(valueAt(4, [] as BudgetApprovalHistory[])) as BudgetApprovalHistory[]);
-      setInvoices(rowsOf(valueAt(5, [] as Invoice[])) as Invoice[]);
-      setPayments(rowsOf(valueAt(6, [] as Payment[])) as Payment[]);
+      setAccounts(rowsOf(ledgerAccountData) as LedgerAccount[]);
+      setSnapshots(rowsOf(snapshotData) as SnapshotRow[]);
+      setBudgetPlans(rowsOf(budgetPlanData) as BudgetPlan[]);
+      setBudgetLines(rowsOf(budgetLineData) as BudgetLine[]);
+      setBudgetApprovalHistory(rowsOf(approvalHistoryData) as BudgetApprovalHistory[]);
+      setInvoices(rowsOf(invoiceData) as Invoice[]);
+      setPayments(rowsOf(paymentData) as Payment[]);
     } catch (error) {
       message.error(parseApiError(error, "Failed to load finance advanced workspace"));
     } finally {
@@ -124,14 +121,12 @@ export default function FinanceAdvancedCenter() {
               try {
                 const period = statement?.period;
                 if (!period) return;
-                const response = await apiClient.get("/api/finance/financial-statements/drilldown/", {
-                  params: {
-                    account_id: row.account_id,
-                    start_date: period.start_date,
-                    end_date: period.end_date,
-                  },
+                const response = await financeApi.getStatementDrilldown({
+                  account_id: row.account_id,
+                  start_date: period.start_date,
+                  end_date: period.end_date,
                 });
-                setDrilldown(response.data as DrilldownResponse);
+                setDrilldown(response as DrilldownResponse);
                 setDrilldownOpen(true);
               } catch (error) {
                 message.error(parseApiError(error, "Unable to load drilldown"));
@@ -158,7 +153,7 @@ export default function FinanceAdvancedCenter() {
             size="small"
             onClick={async () => {
               try {
-                await apiClient.post(`/api/finance/budget-plans/${row.id}/submit/`, {});
+                await financeApi.submitBudgetPlan(row.id);
                 message.success("Budget submitted");
                 await loadAll();
               } catch (error) {
@@ -172,7 +167,7 @@ export default function FinanceAdvancedCenter() {
             size="small"
             onClick={async () => {
               try {
-                await apiClient.post(`/api/finance/budget-plans/${row.id}/approve/`, {});
+                await financeApi.approveBudgetPlan(row.id);
                 message.success("Budget approved");
                 await loadAll();
               } catch (error) {
@@ -187,7 +182,7 @@ export default function FinanceAdvancedCenter() {
             danger
             onClick={async () => {
               try {
-                await apiClient.post(`/api/finance/budget-plans/${row.id}/reject/`, {});
+                await financeApi.rejectBudgetPlan(row.id);
                 message.success("Budget rejected");
                 await loadAll();
               } catch (error) {
@@ -202,8 +197,8 @@ export default function FinanceAdvancedCenter() {
             icon={<EyeOutlined />}
             onClick={async () => {
               try {
-                const response = await apiClient.get(`/api/finance/budget-plans/${row.id}/variance-report/`);
-                setVarianceRows((response.data.lines as Array<Record<string, unknown>>) ?? []);
+                const response = await financeApi.getVarianceReport(row.id);
+                setVarianceRows((((response as { lines?: Array<Record<string, unknown>> }).lines) ?? []));
                 setVarianceOpen(true);
               } catch (error) {
                 message.error(parseApiError(error, "Unable to load variance report"));
@@ -301,8 +296,8 @@ export default function FinanceAdvancedCenter() {
                   onFinish={async (values) => {
                     setStatementLoading(true);
                     try {
-                      const response = await apiClient.post("/api/finance/financial-statements/generate/", values);
-                      setStatement(response.data as StatementResponse);
+                      const response = await financeApi.generateFinancialStatement(values);
+                      setStatement(response as StatementResponse);
                       await loadAll();
                     } catch (error) {
                       message.error(parseApiError(error, "Unable to generate statement"));
@@ -496,7 +491,7 @@ export default function FinanceAdvancedCenter() {
           void budgetPlanForm.validateFields().then(async (values) => {
             setSubmitting(true);
             try {
-              await apiClient.post("/api/finance/budget-plans/", values);
+              await financeApi.createBudgetPlan(values);
               message.success("Budget plan created");
               setPlanOpen(false);
               await loadAll();
@@ -531,7 +526,7 @@ export default function FinanceAdvancedCenter() {
           void budgetLineForm.validateFields().then(async (values) => {
             setSubmitting(true);
             try {
-              await apiClient.post("/api/finance/budget-lines/", values);
+              await financeApi.createBudgetLine(values);
               message.success("Budget line created");
               setLineOpen(false);
               await loadAll();

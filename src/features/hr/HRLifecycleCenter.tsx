@@ -2,8 +2,10 @@ import { CheckCircleOutlined, ReloadOutlined } from "@ant-design/icons";
 import { Button, Card, Col, Form, Input, InputNumber, Modal, Row, Select, Space, Statistic, Switch, Table, Tag, Typography, message } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useEffect, useMemo, useState } from "react";
+import { useGetAdminUsersQuery } from "@/features/admin/adminApiSlice";
 import FileAssetUploader from "@/features/files/FileAssetUploader";
-import apiClient from "@/services/apiClient";
+import { hrApi } from "@/features/hr/hrApi";
+import { useGetStaffProfilesQuery } from "@/features/hr/hrApiSlice";
 import { formatDate, formatDateTime, parseApiError, rowsOf } from "@/utils/platform";
 
 type Staff = { id: number; employee_code?: string; first_name?: string; last_name?: string };
@@ -127,6 +129,8 @@ export default function HRLifecycleCenter() {
   const [checklistForm] = Form.useForm<ChecklistFormValues>();
   const [workflowTransitionForm] = Form.useForm<WorkflowTransitionFormValues>();
   const [checklistTransitionForm] = Form.useForm<ChecklistTransitionFormValues>();
+  const { data: staffData, isFetching: staffLoading, refetch: refetchStaff } = useGetStaffProfilesQuery({ page: 1, page_size: 200 });
+  const { data: usersData, isFetching: usersLoading, refetch: refetchUsers } = useGetAdminUsersQuery({ page: 1, page_size: 200 });
 
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -147,21 +151,10 @@ export default function HRLifecycleCenter() {
   const loadAll = async () => {
     setLoading(true);
     try {
-      const settled = await Promise.allSettled([
-        apiClient.get("/api/hr/staff-profiles/", { params: { page: 1, page_size: 200 } }),
-        apiClient.get("/api/accounts/users/", { params: { page: 1, page_size: 200 } }),
-        apiClient.get("/api/hr/lifecycle-workflows/", { params: { page: 1, page_size: 200 } }),
-        apiClient.get("/api/hr/lifecycle-checklist-items/", { params: { page: 1, page_size: 500 } }),
-      ]);
-
-      const valueAt = <T,>(index: number, fallback: T) =>
-        settled[index].status === "fulfilled" ? (settled[index] as PromiseFulfilledResult<{ data: T }>).value.data : fallback;
-
-      setStaff(rowsOf(valueAt(0, [] as Staff[])) as Staff[]);
-      setUsers(rowsOf(valueAt(1, [] as User[])) as User[]);
-      const nextWorkflows = rowsOf(valueAt(2, [] as Workflow[])) as Workflow[];
+      const { workflowData, checklistData } = await hrApi.lifecycle.load();
+      const nextWorkflows = rowsOf(workflowData) as Workflow[];
       setWorkflows(nextWorkflows);
-      setItems(rowsOf(valueAt(3, [] as ChecklistItem[])) as ChecklistItem[]);
+      setItems(rowsOf(checklistData) as ChecklistItem[]);
       if (!selectedWorkflowId && nextWorkflows.length) {
         setSelectedWorkflowId(nextWorkflows[0].id);
         checklistForm.setFieldValue("workflow", nextWorkflows[0].id);
@@ -175,12 +168,9 @@ export default function HRLifecycleCenter() {
 
   const loadWorkflowDetail = async (workflowId: number) => {
     try {
-      const [progressResponse, historyResponse] = await Promise.all([
-        apiClient.get(`/api/hr/lifecycle-workflows/${workflowId}/progress/`),
-        apiClient.get(`/api/hr/lifecycle-workflows/${workflowId}/history/`),
-      ]);
-      setProgress(progressResponse.data as WorkflowProgress);
-      setWorkflowHistory(Array.isArray(historyResponse.data) ? (historyResponse.data as WorkflowHistoryRow[]) : []);
+      const { progressData, historyData } = await hrApi.lifecycle.getWorkflowDetail(workflowId);
+      setProgress(progressData as WorkflowProgress);
+      setWorkflowHistory(Array.isArray(historyData) ? (historyData as WorkflowHistoryRow[]) : []);
     } catch (error) {
       message.error(parseApiError(error, "Unable to load workflow detail"));
     }
@@ -188,8 +178,8 @@ export default function HRLifecycleCenter() {
 
   const loadItemHistory = async (itemId: number) => {
     try {
-      const response = await apiClient.get(`/api/hr/lifecycle-checklist-items/${itemId}/history/`);
-      setItemHistory(Array.isArray(response.data) ? (response.data as ChecklistHistoryRow[]) : []);
+      const response = await hrApi.lifecycle.getChecklistHistory(itemId);
+      setItemHistory(Array.isArray(response) ? (response as ChecklistHistoryRow[]) : []);
     } catch (error) {
       message.error(parseApiError(error, "Unable to load checklist history"));
     }
@@ -200,6 +190,20 @@ export default function HRLifecycleCenter() {
     checklistForm.setFieldsValue({ sequence: 1, is_required: true });
     void loadAll();
   }, []);
+
+  useEffect(() => {
+    setStaff(rowsOf(staffData) as Staff[]);
+  }, [staffData]);
+
+  useEffect(() => {
+    setUsers(rowsOf(usersData) as User[]);
+  }, [usersData]);
+
+  const pageLoading = loading || staffLoading || usersLoading;
+
+  const refreshAll = async () => {
+    await Promise.all([loadAll(), refetchStaff(), refetchUsers()]);
+  };
 
   useEffect(() => {
     if (selectedWorkflowId) {
@@ -238,7 +242,7 @@ export default function HRLifecycleCenter() {
     try {
       const values = await workflowTransitionForm.validateFields();
       setActionKey(`workflow-${target.action}-${target.id}`);
-      await apiClient.post(`/api/hr/lifecycle-workflows/${target.id}/${target.action}/`, values.reason?.trim() ? { reason: values.reason.trim() } : {});
+      await hrApi.lifecycle.transitionWorkflow(target.id, target.action, values.reason);
       message.success(workflowActionMessages[target.action]);
       setSelectedWorkflowId(target.id);
       setWorkflowActionTarget(null);
@@ -259,7 +263,7 @@ export default function HRLifecycleCenter() {
     try {
       const values = await checklistTransitionForm.validateFields();
       setActionKey(`checklist-${target.action}-${target.id}`);
-      await apiClient.post(`/api/hr/lifecycle-checklist-items/${target.id}/${target.action}/`, values.note?.trim() ? { note: values.note.trim() } : {});
+      await hrApi.lifecycle.transitionChecklist(target.id, target.action, values.note);
       message.success(checklistActionMessages[target.action]);
       setSelectedWorkflowId(target.workflowId);
       setSelectedItemId(target.id);
@@ -317,7 +321,7 @@ export default function HRLifecycleCenter() {
             Sprint 10 onboarding and offboarding orchestration with checklist actions, progress, and transition history.
           </Typography.Paragraph>
         </div>
-        <Button icon={<ReloadOutlined />} onClick={() => void loadAll()} loading={loading}>
+        <Button icon={<ReloadOutlined />} onClick={() => void refreshAll()} loading={pageLoading}>
           Refresh
         </Button>
       </div>
@@ -363,7 +367,7 @@ export default function HRLifecycleCenter() {
                 try {
                   const values = await workflowForm.validateFields();
                   setSubmitting(true);
-                  await apiClient.post("/api/hr/lifecycle-workflows/", values);
+                  await hrApi.lifecycle.createWorkflow(values);
                   message.success("Lifecycle workflow created");
                   workflowForm.resetFields();
                   workflowForm.setFieldsValue({ workflow_type: "ONBOARDING" });
@@ -413,7 +417,7 @@ export default function HRLifecycleCenter() {
                   setSubmitting(true);
                   const payload: Record<string, unknown> = { ...values };
                   if (uploadedEvidenceAssetId) payload.evidence_file = uploadedEvidenceAssetId;
-                  await apiClient.post("/api/hr/lifecycle-checklist-items/", payload);
+                  await hrApi.lifecycle.createChecklistItem(payload);
                   message.success("Checklist item created");
                   setUploadedEvidenceAssetId(null);
                   checklistForm.resetFields();
@@ -435,7 +439,7 @@ export default function HRLifecycleCenter() {
           <div className="text-white font-medium mb-3">Workflow Board</div>
           <Table
             rowKey="id"
-            loading={loading}
+            loading={pageLoading}
             dataSource={workflows}
             columns={[
               ...workflowColumns,

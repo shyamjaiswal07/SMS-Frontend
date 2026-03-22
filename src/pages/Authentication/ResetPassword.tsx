@@ -2,8 +2,8 @@ import { ArrowLeftOutlined, LockOutlined } from "@ant-design/icons";
 import { Button, Card, Form, Input, Typography, message } from "antd";
 import { useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { authApi } from "@/features/auth/authApi";
 import PasswordRequirementList from "@/features/auth/PasswordRequirementList";
-import { api } from "@/services/api";
 import { parseApiError } from "@/utils/platform";
 
 type ResetValues = {
@@ -49,7 +49,7 @@ export default function ResetPassword() {
             onFinish={async (values) => {
               setSubmitting(true);
               try {
-                await api.passwordReset.confirm({
+                await authApi.passwordReset.confirm({
                   uid,
                   token,
                   new_password: values.newPassword,

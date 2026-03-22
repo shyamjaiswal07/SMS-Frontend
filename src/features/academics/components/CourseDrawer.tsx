@@ -1,7 +1,8 @@
 import { Badge, Button, Card, Descriptions, Drawer, Spin, Table, Tag, Tabs, Typography, message } from "antd";
 import { useEffect, useMemo, useState } from "react";
 import type { ClassScheduleRow, CoursePrerequisiteRow, CourseRow } from "../academicsTypes";
-import { academicsApi } from "../academicsApi";
+import { useGetCoursePrerequisitesQuery, useGetClassSchedulesQuery } from "../academicsApiSlice";
+import { rowsOf } from "@/utils/platform";
 
 type Props = {
   open: boolean;
@@ -25,63 +26,35 @@ const dayOfWeekLabel = (d?: number) => {
 
 export default function CourseDrawer({ open, onClose, course, coursesById }: Props) {
   const [activeTab, setActiveTab] = useState<"prereq" | "schedule">("prereq");
-  const [loading, setLoading] = useState({ prereq: false, schedule: false });
-
-  const [prerequisites, setPrerequisites] = useState<CoursePrerequisiteRow[]>([]);
-  const [schedules, setSchedules] = useState<ClassScheduleRow[]>([]);
-
   const courseId = useMemo(() => course?.id, [course]);
 
-  useEffect(() => {
-    if (!open || !courseId) return;
-    setActiveTab("prereq");
-    setPrerequisites([]);
-    setSchedules([]);
+  const { data: prereqData, isFetching: prereqLoading } = useGetCoursePrerequisitesQuery(
+    { search: course?.title ?? course?.code, page_size: 50 },
+    { skip: !open || !courseId || activeTab !== "prereq" }
+  );
 
-    void loadPrereqs();
+  const { data: scheduleData, isFetching: scheduleLoading } = useGetClassSchedulesQuery(
+    { search: course?.title ?? course?.code, page_size: 50 },
+    { skip: !open || !courseId || activeTab !== "schedule" }
+  );
+
+  const prerequisites = useMemo(() => {
+    if (!courseId || !prereqData) return [];
+    const list = rowsOf(prereqData) as CoursePrerequisiteRow[];
+    return list.filter((x: any) => Number(x.course) === Number(courseId));
+  }, [prereqData, courseId]);
+
+  const schedules = useMemo(() => {
+    if (!courseId || !scheduleData) return [];
+    const list = rowsOf(scheduleData) as ClassScheduleRow[];
+    return list.filter((x: any) => Number(x.course) === Number(courseId));
+  }, [scheduleData, courseId]);
+
+  useEffect(() => {
+    if (!open) return;
+    setActiveTab("prereq");
   }, [open, courseId]);
 
-  const loadPrereqs = async () => {
-    if (!courseId) return;
-    if (loading.prereq) return;
-
-    setLoading((p) => ({ ...p, prereq: true }));
-    try {
-      const data = await academicsApi.coursePrerequisites.list({
-        search: course?.title ?? course?.code,
-        page_size: 50,
-      });
-
-      const list = Array.isArray((data as any)?.results) ? (data as any).results : Array.isArray(data) ? (data as any) : [];
-      const filtered = list.filter((x: any) => Number(x.course) === Number(courseId));
-      setPrerequisites(filtered);
-    } catch (e: any) {
-      message.error(e?.response?.data?.detail ?? "Failed to load prerequisites");
-    } finally {
-      setLoading((p) => ({ ...p, prereq: false }));
-    }
-  };
-
-  const loadSchedules = async () => {
-    if (!courseId) return;
-    if (loading.schedule) return;
-
-    setLoading((p) => ({ ...p, schedule: true }));
-    try {
-      const data = await academicsApi.classSchedules.list({
-        search: course?.title ?? course?.code,
-        page_size: 50,
-      });
-
-      const list = Array.isArray((data as any)?.results) ? (data as any).results : Array.isArray(data) ? (data as any) : [];
-      const filtered = list.filter((x: any) => Number(x.course) === Number(courseId));
-      setSchedules(filtered);
-    } catch (e: any) {
-      message.error(e?.response?.data?.detail ?? "Failed to load schedules");
-    } finally {
-      setLoading((p) => ({ ...p, schedule: false }));
-    }
-  };
 
   return (
     <Drawer
@@ -129,17 +102,14 @@ export default function CourseDrawer({ open, onClose, course, coursesById }: Pro
           <Tabs
             activeKey={activeTab}
             onChange={(k) => {
-              const next = k as typeof activeTab;
-              setActiveTab(next);
-              if (next === "prereq") void loadPrereqs();
-              if (next === "schedule") void loadSchedules();
+              setActiveTab(k as typeof activeTab);
             }}
             items={[
               {
                 key: "prereq",
                 label: "Prerequisites",
                 children: (
-                  loading.prereq ? (
+                  prereqLoading ? (
                     <div className="py-10 flex justify-center">
                       <Spin />
                     </div>
@@ -178,7 +148,7 @@ export default function CourseDrawer({ open, onClose, course, coursesById }: Pro
                 key: "schedule",
                 label: "Class Schedules",
                 children: (
-                  loading.schedule ? (
+                  scheduleLoading ? (
                     <div className="py-10 flex justify-center">
                       <Spin />
                     </div>

@@ -2,7 +2,9 @@ import { DownloadOutlined, ReloadOutlined, SafetyCertificateOutlined } from "@an
 import { Button, Card, Col, Form, Input, Row, Select, Table, Tag, Typography, message } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useEffect, useMemo, useState } from "react";
-import apiClient from "@/services/apiClient";
+import { academicOperationsApi } from "@/features/academics/academicOperationsApi";
+import { useGetAcademicYearsQuery, useGetTermsQuery } from "@/features/institutions/institutionsApiSlice";
+import { useGetStudentsQuery } from "@/features/students/studentsApiSlice";
 import { downloadFromApi, formatDate, parseApiError, rowsOf } from "@/utils/platform";
 
 type Student = { id: number; student_id?: string; first_name?: string; last_name?: string };
@@ -17,27 +19,34 @@ type VerifyForm = { verification_code: string };
 export default function AcademicArtifactsCenter() {
   const [artifactForm] = Form.useForm<ArtifactForm>();
   const [verifyForm] = Form.useForm<VerifyForm>();
-  const [students, setStudents] = useState<Student[]>([]);
-  const [years, setYears] = useState<AcademicYear[]>([]);
-  const [terms, setTerms] = useState<Term[]>([]);
   const [artifacts, setArtifacts] = useState<Artifact[]>([]);
   const [verification, setVerification] = useState<VerifyResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const {
+    data: studentsData,
+    isFetching: studentsLoading,
+    refetch: refetchStudents,
+  } = useGetStudentsQuery({ page: 1, page_size: 200 });
+  const {
+    data: yearsData,
+    isFetching: yearsLoading,
+    refetch: refetchYears,
+  } = useGetAcademicYearsQuery({ page: 1, page_size: 100 });
+  const {
+    data: termsData,
+    isFetching: termsLoading,
+    refetch: refetchTerms,
+  } = useGetTermsQuery({ page: 1, page_size: 100 });
+  const students = rowsOf(studentsData) as Student[];
+  const years = rowsOf(yearsData) as AcademicYear[];
+  const terms = rowsOf(termsData) as Term[];
 
   const loadAll = async () => {
     setLoading(true);
     try {
-      const [studentResponse, yearResponse, termResponse, artifactResponse] = await Promise.all([
-        apiClient.get("/api/students/students/", { params: { page: 1, page_size: 200 } }),
-        apiClient.get("/api/institutions/academic-years/", { params: { page: 1, page_size: 100 } }),
-        apiClient.get("/api/institutions/terms/", { params: { page: 1, page_size: 100 } }),
-        apiClient.get("/api/academics/artifacts/", { params: { page: 1, page_size: 200 } }),
-      ]);
-      setStudents(rowsOf(studentResponse.data) as Student[]);
-      setYears(rowsOf(yearResponse.data) as AcademicYear[]);
-      setTerms(rowsOf(termResponse.data) as Term[]);
-      setArtifacts(rowsOf(artifactResponse.data) as Artifact[]);
+      const { artifactData } = await academicOperationsApi.artifacts.load();
+      setArtifacts(rowsOf(artifactData) as Artifact[]);
     } catch (error) {
       message.error(parseApiError(error, "Failed to load academic artifacts"));
     } finally {
@@ -81,7 +90,11 @@ export default function AcademicArtifactsCenter() {
             Generate report cards, certificates, transcripts, and verify documents by public verification code.
           </Typography.Paragraph>
         </div>
-        <Button icon={<ReloadOutlined />} onClick={() => void loadAll()} loading={loading}>
+        <Button
+          icon={<ReloadOutlined />}
+          onClick={() => void Promise.all([loadAll(), refetchStudents(), refetchYears(), refetchTerms()])}
+          loading={loading || studentsLoading || yearsLoading || termsLoading}
+        >
           Refresh
         </Button>
       </div>
@@ -111,12 +124,8 @@ export default function AcademicArtifactsCenter() {
                   const values = await artifactForm.validateFields();
                   setSubmitting(true);
                   const endpoint =
-                    values.artifact_type === "REPORT_CARD"
-                      ? "/api/academics/artifacts/report-card/generate/"
-                      : values.artifact_type === "CERTIFICATE"
-                        ? "/api/academics/artifacts/certificate/generate/"
-                        : "/api/academics/artifacts/transcript/generate/";
-                  await apiClient.post(endpoint, {
+                    values.artifact_type;
+                  await academicOperationsApi.artifacts.generateArtifact(values.artifact_type, {
                     student_id: values.student_id,
                     academic_year_id: values.academic_year_id,
                     term_id: values.term_id,
@@ -144,8 +153,8 @@ export default function AcademicArtifactsCenter() {
           <div className="text-white font-medium mb-3">Verification</div>
           <Form<VerifyForm> form={verifyForm} layout="inline" onFinish={async (values) => {
             try {
-              const response = await apiClient.get("/api/academics/artifacts/verify/", { params: values });
-              setVerification(response.data as VerifyResponse);
+              const response = await academicOperationsApi.artifacts.verifyArtifact(values);
+              setVerification(response as VerifyResponse);
             } catch (error) {
               message.error(parseApiError(error, "Unable to verify artifact"));
             }
@@ -165,7 +174,7 @@ export default function AcademicArtifactsCenter() {
           ) : null}
 
           <div className="mt-6 text-white font-medium mb-3">Generated Artifacts</div>
-          <Table rowKey="id" loading={loading} dataSource={artifacts} columns={columns} pagination={{ pageSize: 6 }} />
+          <Table rowKey="id" loading={loading || studentsLoading || yearsLoading || termsLoading} dataSource={artifacts} columns={columns} pagination={{ pageSize: 6 }} />
         </Card>
       </div>
     </div>

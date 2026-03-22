@@ -28,6 +28,28 @@ export const erpApi = {
   fetchSummary: (config: SummaryConfig) => get(config.endpoint),
   createRecord: (endpoint: string, payload: Record<string, unknown>) => post(endpoint, payload),
   fetchOptions: (endpoint: string, params?: Record<string, unknown>) => get(endpoint, params),
+  reports: {
+    async loadLibrary(dueBefore?: string) {
+      const [analyticsData, overdueData] = await Promise.all([
+        get("/api/library/book-issues/analytics/"),
+        get("/api/library/book-issues/overdue-report/", dueBefore ? { due_before: dueBefore } : undefined),
+      ]);
+
+      return { analyticsData, overdueData };
+    },
+    async loadTransport(params?: Record<string, unknown>) {
+      const [occupancyData, utilizationData, costTrendData] = await Promise.all([
+        get("/api/transport/routes/occupancy-report/"),
+        get("/api/transport/student-transport-allocations/utilization-report/", params),
+        get("/api/transport/vehicle-maintenance/cost-trend/", params),
+      ]);
+
+      return { occupancyData, utilizationData, costTrendData };
+    },
+    runLibraryLateFees() {
+      return post("/api/common/automation/run/", { task_type: "LIBRARY_LATE_FEES" });
+    },
+  },
 };
 
 export const erpModuleConfigs = {

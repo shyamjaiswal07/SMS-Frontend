@@ -2,10 +2,12 @@ import { DollarOutlined, FileTextOutlined, OrderedListOutlined, WalletOutlined }
 import { Button, Card, Col, Empty, Form, Input, InputNumber, Modal, Row, Select, Space, Statistic, Switch, Table, Tabs, Tag, Typography, message } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useEffect, useMemo, useState } from "react";
-import apiClient from "@/services/apiClient";
+import { useGetAcademicYearsQuery, useGetTermsQuery } from "@/features/institutions/institutionsApiSlice";
+import { financeApi } from "@/features/finance/financeApi";
+import { useGetStudentsQuery } from "@/features/students/studentsApiSlice";
+import { rowsOf } from "@/utils/platform";
 
 type Role = "SUPER_ADMIN" | "SCHOOL_ADMIN" | "ACCOUNTANT" | "TEACHER" | "STUDENT" | "PARENT" | "HR_MANAGER" | "LIBRARIAN" | "TRANSPORT_COORDINATOR";
-type Paginated<T> = { results?: T[] };
 type Student = { id: number; student_id?: string; first_name?: string; last_name?: string };
 type AcademicYear = { id: number; name?: string };
 type Term = { id: number; name?: string };
@@ -20,7 +22,6 @@ type InvoiceForm = { student: number; academic_year: number; term?: number; invo
 type InvoiceLineForm = { invoice: number; category: number; description: string; quantity: number; unit_amount: number; line_total: number };
 type PaymentForm = { invoice: number; student: number; payment_reference: string; method: string; status: string; amount: number; paid_on?: string };
 
-const rowsOf = <T,>(data?: Paginated<T> | T[]) => (Array.isArray(data) ? data : Array.isArray(data?.results) ? data.results : []);
 const dt = (value?: string | null) => (value ? new Date(value).toLocaleDateString() : "-");
 
 function getRole(): Role | undefined {
@@ -38,9 +39,6 @@ export default function FinancePage() {
 
   const [loading, setLoading] = useState(false);
   const [summary, setSummary] = useState<OutstandingSummary>({ invoice_count: 0, total_invoiced: 0, total_due: 0, total_paid: 0 });
-  const [students, setStudents] = useState<Student[]>([]);
-  const [academicYears, setAcademicYears] = useState<AcademicYear[]>([]);
-  const [terms, setTerms] = useState<Term[]>([]);
   const [feeCategories, setFeeCategories] = useState<FeeCategory[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [invoiceLines, setInvoiceLines] = useState<InvoiceLine[]>([]);
@@ -55,33 +53,37 @@ export default function FinancePage() {
   const [invoiceForm] = Form.useForm<InvoiceForm>();
   const [invoiceLineForm] = Form.useForm<InvoiceLineForm>();
   const [paymentForm] = Form.useForm<PaymentForm>();
+  const {
+    data: studentsData,
+    isFetching: studentsLoading,
+    refetch: refetchStudents,
+  } = useGetStudentsQuery({ page: 1, page_size: 200 });
+  const {
+    data: academicYearsData,
+    isFetching: academicYearsLoading,
+    refetch: refetchAcademicYears,
+  } = useGetAcademicYearsQuery({ page: 1, page_size: 100 });
+  const {
+    data: termsData,
+    isFetching: termsLoading,
+    refetch: refetchTerms,
+  } = useGetTermsQuery({ page: 1, page_size: 100 });
+  const students = rowsOf(studentsData) as Student[];
+  const academicYears = rowsOf(academicYearsData) as AcademicYear[];
+  const terms = rowsOf(termsData) as Term[];
 
   const loadAll = async () => {
     setLoading(true);
     try {
-      const settled = await Promise.allSettled([
-        apiClient.get("/api/finance/invoices/outstanding-summary/"),
-        apiClient.get("/api/students/students/", { params: { page: 1, page_size: 200 } }),
-        apiClient.get("/api/institutions/academic-years/", { params: { page: 1, page_size: 100 } }),
-        apiClient.get("/api/institutions/terms/", { params: { page: 1, page_size: 100 } }),
-        apiClient.get("/api/finance/fee-categories/", { params: { page: 1, page_size: 100 } }),
-        apiClient.get("/api/finance/invoices/", { params: { page: 1, page_size: 100 } }),
-        apiClient.get("/api/finance/invoice-lines/", { params: { page: 1, page_size: 200 } }),
-        apiClient.get("/api/finance/payments/", { params: { page: 1, page_size: 100 } }),
-      ]);
+      const { summaryData, feeCategoryData, invoiceData, invoiceLineData, paymentData } = await financeApi.loadWorkspace();
 
-      const valueAt = <T,>(index: number, fallback: T) => (settled[index].status === "fulfilled" ? (settled[index] as PromiseFulfilledResult<{ data: T }>).value.data : fallback);
-
-      setSummary(valueAt(0, { invoice_count: 0, total_invoiced: 0, total_due: 0, total_paid: 0 }));
-      setStudents(rowsOf<Student>(valueAt(1, [] as Student[])));
-      setAcademicYears(rowsOf<AcademicYear>(valueAt(2, [] as AcademicYear[])));
-      setTerms(rowsOf<Term>(valueAt(3, [] as Term[])));
-      setFeeCategories(rowsOf<FeeCategory>(valueAt(4, [] as FeeCategory[])));
-      setInvoices(rowsOf<Invoice>(valueAt(5, [] as Invoice[])));
-      setInvoiceLines(rowsOf<InvoiceLine>(valueAt(6, [] as InvoiceLine[])));
-      setPayments(rowsOf<Payment>(valueAt(7, [] as Payment[])));
-    } catch (error: any) {
-      message.error(error?.response?.data?.detail ?? "Failed to load finance workspace");
+      setSummary(summaryData as OutstandingSummary);
+      setFeeCategories(rowsOf<FeeCategory>(feeCategoryData as FeeCategory[]));
+      setInvoices(rowsOf<Invoice>(invoiceData as Invoice[]));
+      setInvoiceLines(rowsOf<InvoiceLine>(invoiceLineData as InvoiceLine[]));
+      setPayments(rowsOf<Payment>(paymentData as Payment[]));
+    } catch (error) {
+      message.error("Failed to load finance workspace");
     } finally {
       setLoading(false);
     }
@@ -142,7 +144,7 @@ export default function FinancePage() {
     const values = await categoryForm.validateFields();
     setSubmitting(true);
     try {
-      await apiClient.post("/api/finance/fee-categories/", values);
+      await financeApi.createPageRecord("feeCategories", values);
       message.success("Fee category created");
       setCategoryOpen(false);
       categoryForm.resetFields();
@@ -158,7 +160,7 @@ export default function FinancePage() {
     const values = await invoiceForm.validateFields();
     setSubmitting(true);
     try {
-      await apiClient.post("/api/finance/invoices/", values);
+      await financeApi.createPageRecord("invoices", values);
       message.success("Invoice created");
       setInvoiceOpen(false);
       invoiceForm.resetFields();
@@ -175,7 +177,7 @@ export default function FinancePage() {
     const values = await invoiceLineForm.validateFields();
     setSubmitting(true);
     try {
-      await apiClient.post("/api/finance/invoice-lines/", values);
+      await financeApi.createPageRecord("invoiceLines", values);
       message.success("Invoice line created");
       setInvoiceLineOpen(false);
       invoiceLineForm.resetFields();
@@ -191,7 +193,7 @@ export default function FinancePage() {
     const values = await paymentForm.validateFields();
     setSubmitting(true);
     try {
-      await apiClient.post("/api/finance/payments/", values);
+      await financeApi.createPageRecord("payments", values);
       message.success("Payment recorded");
       setPaymentOpen(false);
       paymentForm.resetFields();
@@ -217,7 +219,12 @@ export default function FinancePage() {
         </div>
         <Space wrap>
           <Tag color="gold">{role ?? "UNKNOWN"}</Tag>
-          <Button onClick={() => void loadAll()} loading={loading}>Refresh</Button>
+          <Button
+            onClick={() => void Promise.all([loadAll(), refetchStudents(), refetchAcademicYears(), refetchTerms()])}
+            loading={loading || studentsLoading || academicYearsLoading || termsLoading}
+          >
+            Refresh
+          </Button>
         </Space>
       </div>
 
@@ -243,7 +250,7 @@ export default function FinancePage() {
                   </div>
                   {canWrite ? <Button type="primary" className="!rounded-2xl !bg-[var(--cv-accent)] !border-0" onClick={() => { invoiceForm.resetFields(); invoiceForm.setFieldsValue({ status: "DRAFT", discount_amount: 0, tax_amount: 0, subtotal_amount: 0, total_amount: 0, due_amount: 0 }); setInvoiceOpen(true); }}>New Invoice</Button> : null}
                 </div>
-                <Table rowKey="id" loading={loading} dataSource={invoices} columns={invoiceColumns} pagination={{ pageSize: 8 }} />
+                <Table rowKey="id" loading={loading || studentsLoading || academicYearsLoading || termsLoading} dataSource={invoices} columns={invoiceColumns} pagination={{ pageSize: 8 }} />
               </Card>
             ),
           },
@@ -259,7 +266,7 @@ export default function FinancePage() {
                   </div>
                   {canWrite ? <Button type="primary" className="!rounded-2xl !bg-[var(--cv-accent)] !border-0" onClick={() => { paymentForm.resetFields(); paymentForm.setFieldsValue({ method: "CASH", status: "SUCCESS" }); setPaymentOpen(true); }}>Record Payment</Button> : null}
                 </div>
-                <Table rowKey="id" loading={loading} dataSource={payments} columns={paymentColumns} pagination={{ pageSize: 8 }} />
+                <Table rowKey="id" loading={loading || studentsLoading || academicYearsLoading || termsLoading} dataSource={payments} columns={paymentColumns} pagination={{ pageSize: 8 }} />
               </Card>
             ),
           },
@@ -277,7 +284,7 @@ export default function FinancePage() {
                       </div>
                       {canWrite ? <Button onClick={() => { categoryForm.resetFields(); categoryForm.setFieldsValue({ is_recurring: true }); setCategoryOpen(true); }}>Add Category</Button> : null}
                     </div>
-                    <Table rowKey="id" loading={loading} dataSource={feeCategories} columns={categoryColumns} pagination={{ pageSize: 6 }} />
+                    <Table rowKey="id" loading={loading || studentsLoading || academicYearsLoading || termsLoading} dataSource={feeCategories} columns={categoryColumns} pagination={{ pageSize: 6 }} />
                   </Card>
                 </Col>
                 <Col xs={24} xl={14}>
@@ -289,7 +296,7 @@ export default function FinancePage() {
                       </div>
                       {canWrite ? <Button onClick={() => { invoiceLineForm.resetFields(); invoiceLineForm.setFieldsValue({ quantity: 1, unit_amount: 0, line_total: 0 }); setInvoiceLineOpen(true); }}>Add Invoice Line</Button> : null}
                     </div>
-                    {invoiceLines.length ? <Table rowKey="id" loading={loading} dataSource={invoiceLines} columns={invoiceLineColumns} pagination={{ pageSize: 6 }} /> : <Empty description={<span className="text-white/50">No invoice lines available</span>} />}
+                    {invoiceLines.length ? <Table rowKey="id" loading={loading || studentsLoading || academicYearsLoading || termsLoading} dataSource={invoiceLines} columns={invoiceLineColumns} pagination={{ pageSize: 6 }} /> : <Empty description={<span className="text-white/50">No invoice lines available</span>} />}
                   </Card>
                 </Col>
               </Row>

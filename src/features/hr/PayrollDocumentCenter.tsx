@@ -2,7 +2,8 @@ import { FileTextOutlined, ReloadOutlined, SafetyCertificateOutlined } from "@an
 import { Button, Card, Col, Form, Input, InputNumber, Modal, Popconfirm, Row, Select, Space, Table, Tag, Typography, message } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useEffect, useMemo, useState } from "react";
-import apiClient from "@/services/apiClient";
+import { hrApi } from "@/features/hr/hrApi";
+import { useGetStaffProfilesQuery } from "@/features/hr/hrApiSlice";
 import { downloadFromApi, formatDate, formatDateTime, parseApiError, rowsOf } from "@/utils/platform";
 
 type StaffRow = {
@@ -85,6 +86,7 @@ function cleanPayload<T extends Record<string, unknown>>(values: T) {
 
 export default function PayrollDocumentCenter() {
   const [ruleForm] = Form.useForm<RuleForm>();
+  const { data: staffData, isFetching: staffLoading, refetch: refetchStaff } = useGetStaffProfilesQuery({ page: 1, page_size: 200 });
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [ruleOpen, setRuleOpen] = useState(false);
@@ -101,24 +103,12 @@ export default function PayrollDocumentCenter() {
   const loadAll = async () => {
     setLoading(true);
     try {
-      const settled = await Promise.allSettled([
-        apiClient.get("/api/hr/staff-profiles/", { params: { page: 1, page_size: 200 } }),
-        apiClient.get("/api/hr/payroll-tax-benefit-rules/", { params: { page: 1, page_size: 200 } }),
-        apiClient.get("/api/hr/payroll-runs/", { params: { page: 1, page_size: 100 } }),
-        apiClient.get("/api/hr/payslips/", { params: { page: 1, page_size: 200 } }),
-        apiClient.get("/api/hr/payslip-lines/", { params: { page: 1, page_size: 500 } }),
-        apiClient.get("/api/hr/payroll-tax-documents/", { params: { page: 1, page_size: 200 } }),
-      ]);
-
-      const valueAt = <T,>(index: number, fallback: T) =>
-        settled[index].status === "fulfilled" ? (settled[index] as PromiseFulfilledResult<{ data: T }>).value.data : fallback;
-
-      setStaff(rowsOf(valueAt(0, [] as StaffRow[])) as StaffRow[]);
-      setRules(rowsOf(valueAt(1, [] as PayrollRuleRow[])) as PayrollRuleRow[]);
-      setRuns(rowsOf(valueAt(2, [] as PayrollRunRow[])) as PayrollRunRow[]);
-      setPayslips(rowsOf(valueAt(3, [] as PayslipRow[])) as PayslipRow[]);
-      setPayslipLines(rowsOf(valueAt(4, [] as PayslipLineRow[])) as PayslipLineRow[]);
-      setTaxDocuments(rowsOf(valueAt(5, [] as PayrollTaxDocumentRow[])) as PayrollTaxDocumentRow[]);
+      const { ruleData, runData, payslipData, payslipLineData, taxDocumentData } = await hrApi.payroll.load();
+      setRules(rowsOf(ruleData) as PayrollRuleRow[]);
+      setRuns(rowsOf(runData) as PayrollRunRow[]);
+      setPayslips(rowsOf(payslipData) as PayslipRow[]);
+      setPayslipLines(rowsOf(payslipLineData) as PayslipLineRow[]);
+      setTaxDocuments(rowsOf(taxDocumentData) as PayrollTaxDocumentRow[]);
     } catch (error) {
       message.error(parseApiError(error, "Failed to load payroll workspace"));
     } finally {
@@ -129,6 +119,16 @@ export default function PayrollDocumentCenter() {
   useEffect(() => {
     void loadAll();
   }, []);
+
+  useEffect(() => {
+    setStaff(rowsOf(staffData) as StaffRow[]);
+  }, [staffData]);
+
+  const pageLoading = loading || staffLoading;
+
+  const refreshAll = async () => {
+    await Promise.all([loadAll(), refetchStaff()]);
+  };
 
   const staffMap = useMemo(
     () =>
@@ -205,7 +205,7 @@ export default function PayrollDocumentCenter() {
             title="Delete this tax / benefit rule?"
             onConfirm={async () => {
               try {
-                await apiClient.delete(`/api/hr/payroll-tax-benefit-rules/${row.id}/`);
+                await hrApi.payroll.deleteRule(row.id);
                 message.success("Rule deleted");
                 await loadAll();
               } catch (error) {
@@ -246,8 +246,8 @@ export default function PayrollDocumentCenter() {
             className="!rounded-2xl !bg-[var(--cv-accent)] !border-0"
             onClick={async () => {
               try {
-                const response = await apiClient.post(`/api/hr/payroll-runs/${row.id}/process/`, {});
-                message.success(`Payroll processed for ${response.data.processed ?? 0} staff`);
+                const response = await hrApi.payroll.processRun(row.id);
+                message.success(`Payroll processed for ${(response as { processed?: number }).processed ?? 0} staff`);
                 setSelectedRunId(row.id);
                 await loadAll();
               } catch (error) {
@@ -285,8 +285,8 @@ export default function PayrollDocumentCenter() {
             icon={<SafetyCertificateOutlined />}
             onClick={async () => {
               try {
-                const response = await apiClient.post(`/api/hr/payslips/${row.id}/generate-tax-document/`, {});
-                message.success(`Tax document ${response.data.document_no ?? ""} generated`);
+                const response = await hrApi.payroll.generateTaxDocument(row.id);
+                message.success(`Tax document ${(response as { document_no?: string }).document_no ?? ""} generated`);
                 setSelectedPayslipId(row.id);
                 await loadAll();
               } catch (error) {
@@ -348,7 +348,7 @@ export default function PayrollDocumentCenter() {
           </Typography.Paragraph>
         </div>
         <Space wrap>
-          <Button icon={<ReloadOutlined />} onClick={() => void loadAll()} loading={loading}>
+          <Button icon={<ReloadOutlined />} onClick={() => void refreshAll()} loading={pageLoading}>
             Refresh
           </Button>
           <Button
@@ -376,7 +376,7 @@ export default function PayrollDocumentCenter() {
         <Col xs={24} xl={12}>
           <Card className="!bg-[var(--cv-card)] !border-white/10 !rounded-3xl h-full">
             <div className="text-white font-medium mb-3">Payroll Tax & Benefit Rules</div>
-            <Table rowKey="id" loading={loading} dataSource={rules} columns={ruleColumns} pagination={{ pageSize: 5 }} />
+            <Table rowKey="id" loading={pageLoading} dataSource={rules} columns={ruleColumns} pagination={{ pageSize: 5 }} />
           </Card>
         </Col>
         <Col xs={24} xl={12}>
@@ -395,7 +395,7 @@ export default function PayrollDocumentCenter() {
                 options={runs.map((item) => ({ value: item.id, label: runMap.get(item.id) ?? `Run #${item.id}` }))}
               />
             </div>
-            <Table rowKey="id" loading={loading} dataSource={runs} columns={runColumns} pagination={{ pageSize: 5 }} />
+            <Table rowKey="id" loading={pageLoading} dataSource={runs} columns={runColumns} pagination={{ pageSize: 5 }} />
           </Card>
         </Col>
       </Row>
@@ -418,20 +418,20 @@ export default function PayrollDocumentCenter() {
             }))}
           />
         </div>
-        <Table rowKey="id" loading={loading} dataSource={visiblePayslips} columns={payslipColumns} pagination={{ pageSize: 6 }} />
+        <Table rowKey="id" loading={pageLoading} dataSource={visiblePayslips} columns={payslipColumns} pagination={{ pageSize: 6 }} />
       </Card>
 
       <Row gutter={[16, 16]}>
         <Col xs={24} xl={12}>
           <Card className="!bg-[var(--cv-card)] !border-white/10 !rounded-3xl h-full">
             <div className="text-white font-medium mb-3">Payslip Lines</div>
-            <Table rowKey="id" loading={loading} dataSource={visiblePayslipLines} columns={payslipLineColumns} pagination={{ pageSize: 6 }} />
+            <Table rowKey="id" loading={pageLoading} dataSource={visiblePayslipLines} columns={payslipLineColumns} pagination={{ pageSize: 6 }} />
           </Card>
         </Col>
         <Col xs={24} xl={12}>
           <Card className="!bg-[var(--cv-card)] !border-white/10 !rounded-3xl h-full">
             <div className="text-white font-medium mb-3">Payroll Tax Documents</div>
-            <Table rowKey="id" loading={loading} dataSource={visibleTaxDocs} columns={taxDocColumns} pagination={{ pageSize: 6 }} />
+            <Table rowKey="id" loading={pageLoading} dataSource={visibleTaxDocs} columns={taxDocColumns} pagination={{ pageSize: 6 }} />
           </Card>
         </Col>
       </Row>
@@ -446,11 +446,7 @@ export default function PayrollDocumentCenter() {
             setSubmitting(true);
             try {
               const payload = cleanPayload(values);
-              if (editingRule) {
-                await apiClient.patch(`/api/hr/payroll-tax-benefit-rules/${editingRule.id}/`, payload);
-              } else {
-                await apiClient.post("/api/hr/payroll-tax-benefit-rules/", payload);
-              }
+              await hrApi.payroll.saveRule(payload, editingRule?.id);
               message.success(editingRule ? "Payroll rule updated" : "Payroll rule created");
               setRuleOpen(false);
               await loadAll();

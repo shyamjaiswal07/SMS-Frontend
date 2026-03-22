@@ -2,7 +2,7 @@ import { DownloadOutlined, EditOutlined, FileSearchOutlined, PlayCircleOutlined,
 import { Button, Card, Col, Form, Input, InputNumber, Modal, Popconfirm, Row, Select, Space, Table, Tag, Typography, message } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useEffect, useMemo, useState } from "react";
-import apiClient from "@/services/apiClient";
+import { operationsApi } from "@/features/operations/operationsApi";
 import { downloadFromApi, downloadPostFromApi, formatDateTime, parseApiError, rowsOf } from "@/utils/platform";
 
 type ReportCode = "STUDENTS" | "FINANCE_INVOICES" | "ATTENDANCE" | "LIBRARY_ISSUES" | "TRANSPORT_ALLOCATIONS";
@@ -106,12 +106,9 @@ export default function ReportingCenter() {
   const loadSupportingData = async () => {
     setLoading(true);
     try {
-      const [scheduleResponse, runResponse] = await Promise.all([
-        apiClient.get("/api/common/scheduled-reports/", { params: { page: 1, page_size: 100 } }),
-        apiClient.get("/api/common/scheduled-report-runs/", { params: { page: 1, page_size: 100 } }),
-      ]);
-      setSchedules(rowsOf(scheduleResponse.data) as ScheduledReportRow[]);
-      setRuns(rowsOf(runResponse.data) as ScheduledRunRow[]);
+      const { scheduleData, runData } = await operationsApi.reporting.load();
+      setSchedules(rowsOf(scheduleData) as ScheduledReportRow[]);
+      setRuns(rowsOf(runData) as ScheduledRunRow[]);
     } catch (error) {
       message.error(parseApiError(error, "Failed to load reporting center"));
     } finally {
@@ -142,7 +139,7 @@ export default function ReportingCenter() {
             icon={<PlayCircleOutlined />}
             onClick={async () => {
               try {
-                await apiClient.post(`/api/common/scheduled-reports/${row.id}/run-now/`, {});
+                await operationsApi.reporting.runScheduleNow(row.id);
                 message.success("Schedule queued");
                 await loadSupportingData();
               } catch (error) {
@@ -179,7 +176,7 @@ export default function ReportingCenter() {
             title="Delete this scheduled report?"
             onConfirm={async () => {
               try {
-                await apiClient.delete(`/api/common/scheduled-reports/${row.id}/`);
+                await operationsApi.reporting.deleteSchedule(row.id);
                 message.success("Schedule deleted");
                 await loadSupportingData();
               } catch (error) {
@@ -286,13 +283,13 @@ export default function ReportingCenter() {
           requiredMark={false}
           onFinish={async (values) => {
             try {
-              const response = await apiClient.post("/api/common/reports/query/", {
+              const data = await operationsApi.reporting.queryReport({
                 report_code: values.report_code,
                 page: 1,
                 page_size: values.page_size || 25,
                 filters: cleanFilters(values),
               });
-              setResult(response.data as ReportQueryResult);
+              setResult(data as ReportQueryResult);
             } catch (error) {
               message.error(parseApiError(error, "Unable to query report"));
             }
@@ -421,11 +418,7 @@ export default function ReportingCenter() {
                 filters: values.filters_json?.trim() ? JSON.parse(values.filters_json) : {},
                 is_active: values.is_active,
               };
-              if (editing) {
-                await apiClient.patch(`/api/common/scheduled-reports/${editing.id}/`, payload);
-              } else {
-                await apiClient.post("/api/common/scheduled-reports/", payload);
-              }
+              await operationsApi.reporting.saveSchedule(payload, editing?.id);
               message.success(editing ? "Schedule updated" : "Schedule created");
               setScheduleOpen(false);
               setEditing(null);

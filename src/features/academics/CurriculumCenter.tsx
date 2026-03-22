@@ -2,7 +2,9 @@ import { ReloadOutlined } from "@ant-design/icons";
 import { Button, Card, Col, Form, Input, InputNumber, Row, Select, Space, Table, Tag, Typography, message } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useEffect, useMemo, useState } from "react";
-import apiClient from "@/services/apiClient";
+import { useGetCoursesQuery } from "@/features/academics/academicsApiSlice";
+import { academicOperationsApi } from "@/features/academics/academicOperationsApi";
+import { useGetAcademicYearsQuery, useGetTermsQuery } from "@/features/institutions/institutionsApiSlice";
 import { formatDateTime, parseApiError, rowsOf } from "@/utils/platform";
 
 type AcademicYear = { id: number; name?: string };
@@ -17,6 +19,9 @@ type MappingForm = { curriculum_version: number; course: number; term?: number; 
 export default function CurriculumCenter() {
   const [curriculumForm] = Form.useForm<CurriculumForm>();
   const [mappingForm] = Form.useForm<MappingForm>();
+  const { data: yearsData, isFetching: yearsLoading, refetch: refetchYears } = useGetAcademicYearsQuery({ page: 1, page_size: 100 });
+  const { data: termsData, isFetching: termsLoading, refetch: refetchTerms } = useGetTermsQuery({ page: 1, page_size: 100 });
+  const { data: coursesData, isFetching: coursesLoading, refetch: refetchCourses } = useGetCoursesQuery({ page: 1, page_size: 200 });
   const [years, setYears] = useState<AcademicYear[]>([]);
   const [terms, setTerms] = useState<Term[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
@@ -28,20 +33,9 @@ export default function CurriculumCenter() {
   const loadAll = async () => {
     setLoading(true);
     try {
-      const settled = await Promise.allSettled([
-        apiClient.get("/api/institutions/academic-years/", { params: { page: 1, page_size: 100 } }),
-        apiClient.get("/api/institutions/terms/", { params: { page: 1, page_size: 100 } }),
-        apiClient.get("/api/academics/courses/", { params: { page: 1, page_size: 200 } }),
-        apiClient.get("/api/academics/curriculum-versions/", { params: { page: 1, page_size: 100 } }),
-        apiClient.get("/api/academics/curriculum-version-courses/", { params: { page: 1, page_size: 200 } }),
-      ]);
-      const valueAt = <T,>(index: number, fallback: T) =>
-        settled[index].status === "fulfilled" ? (settled[index] as PromiseFulfilledResult<{ data: T }>).value.data : fallback;
-      setYears(rowsOf(valueAt(0, [] as AcademicYear[])) as AcademicYear[]);
-      setTerms(rowsOf(valueAt(1, [] as Term[])) as Term[]);
-      setCourses(rowsOf(valueAt(2, [] as Course[])) as Course[]);
-      setCurriculums(rowsOf(valueAt(3, [] as CurriculumVersion[])) as CurriculumVersion[]);
-      setMappings(rowsOf(valueAt(4, [] as CurriculumCourse[])) as CurriculumCourse[]);
+      const { curriculumData, mappingData } = await academicOperationsApi.curriculum.load();
+      setCurriculums(rowsOf(curriculumData) as CurriculumVersion[]);
+      setMappings(rowsOf(mappingData) as CurriculumCourse[]);
     } catch (error) {
       message.error(parseApiError(error, "Failed to load curriculum workspace"));
     } finally {
@@ -52,6 +46,24 @@ export default function CurriculumCenter() {
   useEffect(() => {
     void loadAll();
   }, []);
+
+  useEffect(() => {
+    setYears(rowsOf(yearsData) as AcademicYear[]);
+  }, [yearsData]);
+
+  useEffect(() => {
+    setTerms(rowsOf(termsData) as Term[]);
+  }, [termsData]);
+
+  useEffect(() => {
+    setCourses(rowsOf(coursesData) as Course[]);
+  }, [coursesData]);
+
+  const pageLoading = loading || yearsLoading || termsLoading || coursesLoading;
+
+  const refreshAll = async () => {
+    await Promise.all([loadAll(), refetchYears(), refetchTerms(), refetchCourses()]);
+  };
 
   const yearMap = useMemo(() => new Map(years.map((item) => [item.id, item.name ?? `Year #${item.id}`])), [years]);
   const termMap = useMemo(() => new Map(terms.map((item) => [item.id, item.name ?? `Term #${item.id}`])), [terms]);
@@ -73,7 +85,7 @@ export default function CurriculumCenter() {
             size="small"
             onClick={async () => {
               try {
-                await apiClient.post(`/api/academics/curriculum-versions/${row.id}/publish/`, {});
+                await academicOperationsApi.curriculum.publishCurriculum(row.id);
                 message.success("Curriculum published");
                 await loadAll();
               } catch (error) {
@@ -87,7 +99,7 @@ export default function CurriculumCenter() {
             size="small"
             onClick={async () => {
               try {
-                await apiClient.post(`/api/academics/curriculum-versions/${row.id}/clone/`, {});
+                await academicOperationsApi.curriculum.cloneCurriculum(row.id);
                 message.success("Curriculum cloned");
                 await loadAll();
               } catch (error) {
@@ -113,7 +125,7 @@ export default function CurriculumCenter() {
             Manage draft and published curricula, then map courses by term and sequence.
           </Typography.Paragraph>
         </div>
-        <Button icon={<ReloadOutlined />} onClick={() => void loadAll()} loading={loading}>
+        <Button icon={<ReloadOutlined />} onClick={() => void refreshAll()} loading={pageLoading}>
           Refresh
         </Button>
       </div>
@@ -138,7 +150,7 @@ export default function CurriculumCenter() {
                 try {
                   const values = await curriculumForm.validateFields();
                   setSubmitting(true);
-                  await apiClient.post("/api/academics/curriculum-versions/", values);
+                  await academicOperationsApi.curriculum.createCurriculum(values);
                   message.success("Curriculum version created");
                   curriculumForm.resetFields();
                   await loadAll();
@@ -173,7 +185,7 @@ export default function CurriculumCenter() {
                 try {
                   const values = await mappingForm.validateFields();
                   setSubmitting(true);
-                  await apiClient.post("/api/academics/curriculum-version-courses/", values);
+                  await academicOperationsApi.curriculum.createCurriculumMapping(values);
                   message.success("Course mapped");
                   mappingForm.resetFields();
                   await loadAll();
@@ -192,7 +204,7 @@ export default function CurriculumCenter() {
 
       <Card className="!bg-[var(--cv-card)] !border-white/10 !rounded-3xl">
         <div className="text-white font-medium mb-3">Curriculum Versions</div>
-        <Table rowKey="id" loading={loading} dataSource={curriculums} columns={curriculumColumns} pagination={{ pageSize: 6 }} />
+        <Table rowKey="id" loading={pageLoading} dataSource={curriculums} columns={curriculumColumns} pagination={{ pageSize: 6 }} />
 
         <div className="mt-6 text-white font-medium mb-3">Curriculum Map</div>
         <Table

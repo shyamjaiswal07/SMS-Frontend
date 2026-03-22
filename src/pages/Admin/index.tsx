@@ -1,8 +1,17 @@
 import { AuditOutlined, LockOutlined, SafetyCertificateOutlined, TeamOutlined, UploadOutlined } from "@ant-design/icons";
 import { Button, Card, Col, Form, Input, Modal, Row, Select, Space, Statistic, Switch, Table, Tabs, Tag, Typography, Upload, message } from "antd";
 import type { ColumnsType } from "antd/es/table";
-import { useEffect, useMemo, useState } from "react";
-import { adminApi } from "@/features/admin/adminApi";
+import { useMemo, useState } from "react";
+import {
+  useGetAdminUsersQuery,
+  useGetMembershipsQuery,
+  useGetRolePermissionsQuery,
+  useGetLoginAuditsQuery,
+  useGetSchoolsOptionsQuery,
+  useCreateAdminUserMutation,
+  useCreateMembershipMutation,
+  useBulkImportAdminUsersMutation,
+} from "@/features/admin/adminApiSlice";
 import type { AdminMembership, AdminUser, LoginAudit, Paginated, RolePermission, SchoolOption, UserRole } from "@/features/admin/adminTypes";
 
 const roleOptions: Array<{ label: string; value: UserRole }> = [
@@ -26,12 +35,6 @@ const roleColor = (role?: string) => role === "SUPER_ADMIN" ? "gold" : role === 
 const tenantRole = () => { try { const raw = sessionStorage.getItem("tenant"); return raw ? JSON.parse(raw)?.role as string | undefined : undefined; } catch { return undefined; } };
 
 export default function AdminPage() {
-  const [users, setUsers] = useState<AdminUser[]>([]);
-  const [memberships, setMemberships] = useState<AdminMembership[]>([]);
-  const [permissions, setPermissions] = useState<RolePermission[]>([]);
-  const [audits, setAudits] = useState<LoginAudit[]>([]);
-  const [schools, setSchools] = useState<SchoolOption[]>([]);
-  const [loading, setLoading] = useState(false);
   const [userOpen, setUserOpen] = useState(false);
   const [membershipOpen, setMembershipOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -43,29 +46,31 @@ export default function AdminPage() {
   const canWrite = currentRole === "SUPER_ADMIN" || currentRole === "SCHOOL_ADMIN";
   const canWritePermissions = currentRole === "SUPER_ADMIN";
 
-  const loadAll = async () => {
-    setLoading(true);
-    try {
-      const [userData, membershipData, permissionData, auditData, schoolData] = await Promise.all([
-        adminApi.users.list({ page: 1, page_size: 100 }),
-        adminApi.memberships.list({ page: 1, page_size: 100 }),
-        adminApi.rolePermissions.list({ page: 1, page_size: 100 }),
-        adminApi.loginAudits.list({ page: 1, page_size: 100 }),
-        adminApi.schools.list({ page: 1, page_size: 100 }),
-      ]);
-      setUsers(rowsOf(userData));
-      setMemberships(rowsOf(membershipData));
-      setPermissions(rowsOf(permissionData));
-      setAudits(rowsOf(auditData));
-      setSchools(rowsOf(schoolData));
-    } catch (error: any) {
-      message.error(error?.response?.data?.detail ?? "Failed to load admin data");
-    } finally {
-      setLoading(false);
-    }
-  };
+  const { data: usersData, isFetching: usersLoading, refetch: refetchUsers } = useGetAdminUsersQuery({ page: 1, page_size: 100 });
+  const { data: membershipsData, isFetching: membershipsLoading, refetch: refetchMemberships } = useGetMembershipsQuery({ page: 1, page_size: 100 });
+  const { data: permissionsData, isFetching: permissionsLoading, refetch: refetchPermissions } = useGetRolePermissionsQuery({ page: 1, page_size: 100 });
+  const { data: auditsData, isFetching: auditsLoading, refetch: refetchAudits } = useGetLoginAuditsQuery({ page: 1, page_size: 100 });
+  const { data: schoolsData, isFetching: schoolsLoading, refetch: refetchSchools } = useGetSchoolsOptionsQuery({ page: 1, page_size: 100 });
 
-  useEffect(() => { void loadAll(); }, []);
+  const users = rowsOf(usersData);
+  const memberships = rowsOf(membershipsData);
+  const permissions = rowsOf(permissionsData);
+  const audits = rowsOf(auditsData);
+  const schools = rowsOf(schoolsData);
+
+  const loading = usersLoading || membershipsLoading || permissionsLoading || auditsLoading || schoolsLoading;
+
+  const [createUser] = useCreateAdminUserMutation();
+  const [createMembership] = useCreateMembershipMutation();
+  const [bulkImportAdminUsers] = useBulkImportAdminUsersMutation();
+
+  const loadAll = () => {
+    refetchUsers();
+    refetchMemberships();
+    refetchPermissions();
+    refetchAudits();
+    refetchSchools();
+  };
 
   const userOptions = users.map((user) => ({ label: `${user.email} - ${user.role}`, value: user.id }));
   const schoolOptions = schools.map((school) => ({ label: `${school.name} (${school.code})`, value: school.id }));
@@ -159,12 +164,11 @@ export default function AdminPage() {
                       if (!importFile) return;
                       setImporting(true);
                       try {
-                        const result = await adminApi.users.bulkImport(importFile);
+                        const result = await bulkImportAdminUsers(importFile).unwrap();
                         message.success(`Import complete: ${result.created ?? 0} created, ${result.skipped ?? 0} skipped`);
                         setImportFile(null);
-                        await loadAll();
                       } catch (error: any) {
-                        message.error(error?.response?.data?.detail ?? "Bulk import failed");
+                        message.error(error?.data?.detail ?? "Bulk import failed");
                       } finally {
                         setImporting(false);
                       }
@@ -228,13 +232,12 @@ export default function AdminPage() {
           void userForm.validateFields().then(async (values) => {
             setSubmitting(true);
             try {
-              await adminApi.users.create(values);
+              await createUser(values as Record<string, unknown>).unwrap();
               message.success("User created");
               setUserOpen(false);
               userForm.resetFields();
-              await loadAll();
             } catch (error: any) {
-              message.error(error?.response?.data?.detail ?? "Unable to create user");
+              message.error(error?.data?.detail ?? "Unable to create user");
             } finally {
               setSubmitting(false);
             }
@@ -277,13 +280,12 @@ export default function AdminPage() {
           void membershipForm.validateFields().then(async (values) => {
             setSubmitting(true);
             try {
-              await adminApi.memberships.create(values);
+              await createMembership(values as unknown as Record<string, unknown>).unwrap();
               message.success("Membership created");
               setMembershipOpen(false);
               membershipForm.resetFields();
-              await loadAll();
             } catch (error: any) {
-              message.error(error?.response?.data?.detail ?? "Unable to create membership");
+              message.error(error?.data?.detail ?? "Unable to create membership");
             } finally {
               setSubmitting(false);
             }

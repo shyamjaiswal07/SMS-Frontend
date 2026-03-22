@@ -3,7 +3,8 @@ import { Button, Card, Col, Form, Input, InputNumber, Row, Select, Space, Statis
 import type { ColumnsType } from "antd/es/table";
 import { useEffect, useMemo, useState } from "react";
 import FileAssetUploader from "@/features/files/FileAssetUploader";
-import apiClient from "@/services/apiClient";
+import { hrApi } from "@/features/hr/hrApi";
+import { useGetStaffProfilesQuery } from "@/features/hr/hrApiSlice";
 import { formatDate, formatDateTime, parseApiError, rowsOf } from "@/utils/platform";
 
 type Staff = { id: number; employee_code?: string; first_name?: string; last_name?: string };
@@ -26,6 +27,7 @@ export default function HRWorkflowCenter() {
   const [goalForm] = Form.useForm<GoalForm>();
   const [evaluationForm] = Form.useForm<EvaluationForm>();
   const [documentForm] = Form.useForm<DocumentForm>();
+  const { data: staffData, isFetching: staffLoading, refetch: refetchStaff } = useGetStaffProfilesQuery({ page: 1, page_size: 200 });
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [staff, setStaff] = useState<Staff[]>([]);
@@ -40,22 +42,12 @@ export default function HRWorkflowCenter() {
   const loadAll = async () => {
     setLoading(true);
     try {
-      const settled = await Promise.allSettled([
-        apiClient.get("/api/hr/staff-profiles/", { params: { page: 1, page_size: 200 } }),
-        apiClient.get("/api/hr/staff-attendance/", { params: { page: 1, page_size: 200 } }),
-        apiClient.get("/api/hr/performance-cycles/", { params: { page: 1, page_size: 100 } }),
-        apiClient.get("/api/hr/performance-goals/", { params: { page: 1, page_size: 200 } }),
-        apiClient.get("/api/hr/performance-evaluations/", { params: { page: 1, page_size: 200 } }),
-        apiClient.get("/api/hr/staff-documents/", { params: { page: 1, page_size: 200 } }),
-      ]);
-      const valueAt = <T,>(index: number, fallback: T) =>
-        settled[index].status === "fulfilled" ? (settled[index] as PromiseFulfilledResult<{ data: T }>).value.data : fallback;
-      setStaff(rowsOf(valueAt(0, [] as Staff[])) as Staff[]);
-      setAttendanceRows(rowsOf(valueAt(1, [] as StaffAttendance[])) as StaffAttendance[]);
-      setCycles(rowsOf(valueAt(2, [] as PerformanceCycle[])) as PerformanceCycle[]);
-      setGoals(rowsOf(valueAt(3, [] as PerformanceGoal[])) as PerformanceGoal[]);
-      setEvaluations(rowsOf(valueAt(4, [] as PerformanceEvaluation[])) as PerformanceEvaluation[]);
-      setDocuments(rowsOf(valueAt(5, [] as StaffDocument[])) as StaffDocument[]);
+      const { attendanceData, cycleData, goalData, evaluationData, documentData } = await hrApi.workflow.load();
+      setAttendanceRows(rowsOf(attendanceData) as StaffAttendance[]);
+      setCycles(rowsOf(cycleData) as PerformanceCycle[]);
+      setGoals(rowsOf(goalData) as PerformanceGoal[]);
+      setEvaluations(rowsOf(evaluationData) as PerformanceEvaluation[]);
+      setDocuments(rowsOf(documentData) as StaffDocument[]);
     } catch (error) {
       message.error(parseApiError(error, "Failed to load HR workflow workspace"));
     } finally {
@@ -66,6 +58,16 @@ export default function HRWorkflowCenter() {
   useEffect(() => {
     void loadAll();
   }, []);
+
+  useEffect(() => {
+    setStaff(rowsOf(staffData) as Staff[]);
+  }, [staffData]);
+
+  const pageLoading = loading || staffLoading;
+
+  const refreshAll = async () => {
+    await Promise.all([loadAll(), refetchStaff()]);
+  };
 
   const staffMap = useMemo(() => new Map(staff.map((item) => [item.id, `${item.employee_code ?? item.id} - ${item.first_name ?? ""} ${item.last_name ?? ""}`.trim()])), [staff]);
 
@@ -88,7 +90,7 @@ export default function HRWorkflowCenter() {
             Attendance summaries, staff document upload, performance cycles, goals, and approvals.
           </Typography.Paragraph>
         </div>
-        <Button icon={<ReloadOutlined />} onClick={() => void loadAll()} loading={loading}>
+        <Button icon={<ReloadOutlined />} onClick={() => void refreshAll()} loading={pageLoading}>
           Refresh
         </Button>
       </div>
@@ -115,9 +117,9 @@ export default function HRWorkflowCenter() {
                   try {
                     const values = await attendanceForm.validateFields();
                     setSubmitting(true);
-                    await apiClient.post("/api/hr/staff-attendance/", values);
-                    const summary = await apiClient.get("/api/hr/staff-attendance/summary/", { params: { staff_id: values.staff } });
-                    setAttendanceSummary(summary.data as AttendanceSummary);
+                    await hrApi.workflow.createAttendance(values);
+                    const summary = await hrApi.workflow.getAttendanceSummary(values.staff);
+                    setAttendanceSummary(summary as AttendanceSummary);
                     message.success("Attendance saved");
                     await loadAll();
                   } catch (error) {
@@ -133,8 +135,8 @@ export default function HRWorkflowCenter() {
                 onClick={async () => {
                   try {
                     const values = await attendanceForm.validateFields(["staff"]);
-                    const summary = await apiClient.get("/api/hr/staff-attendance/summary/", { params: { staff_id: values.staff } });
-                    setAttendanceSummary(summary.data as AttendanceSummary);
+                    const summary = await hrApi.workflow.getAttendanceSummary(values.staff);
+                    setAttendanceSummary(summary as AttendanceSummary);
                   } catch (error) {
                     message.error(parseApiError(error, "Unable to load attendance summary"));
                   }
@@ -179,7 +181,7 @@ export default function HRWorkflowCenter() {
                     return;
                   }
                   setSubmitting(true);
-                  await apiClient.post("/api/hr/staff-documents/", { ...values, file_asset: uploadedAssetId });
+                  await hrApi.workflow.createStaffDocument({ ...values, file_asset: uploadedAssetId });
                   message.success("Staff document linked");
                   documentForm.resetFields();
                   setUploadedAssetId(null);
@@ -231,7 +233,7 @@ export default function HRWorkflowCenter() {
                 try {
                   const values = await cycleForm.validateFields();
                   setSubmitting(true);
-                  await apiClient.post("/api/hr/performance-cycles/", values);
+                  await hrApi.workflow.createPerformanceCycle(values);
                   message.success("Performance cycle created");
                   cycleForm.resetFields();
                   await loadAll();
@@ -266,7 +268,7 @@ export default function HRWorkflowCenter() {
                 try {
                   const values = await goalForm.validateFields();
                   setSubmitting(true);
-                  await apiClient.post("/api/hr/performance-goals/", values);
+                  await hrApi.workflow.createPerformanceGoal(values);
                   message.success("Goal created");
                   goalForm.resetFields();
                   await loadAll();
@@ -297,7 +299,7 @@ export default function HRWorkflowCenter() {
                 try {
                   const values = await evaluationForm.validateFields();
                   setSubmitting(true);
-                  await apiClient.post("/api/hr/performance-evaluations/", values);
+                  await hrApi.workflow.createPerformanceEvaluation(values);
                   message.success("Evaluation created");
                   evaluationForm.resetFields();
                   await loadAll();
@@ -321,7 +323,7 @@ export default function HRWorkflowCenter() {
             <Table rowKey="id" dataSource={cycles} columns={[
               { title: "Name", dataIndex: "name" },
               { title: "Status", dataIndex: "status", render: (value) => <Tag color={value === "ACTIVE" ? "success" : value === "CLOSED" ? "default" : "processing"}>{value}</Tag> },
-              { title: "Actions", key: "actions", render: (_, row) => <Space wrap><Button size="small" onClick={async () => { try { await apiClient.post(`/api/hr/performance-cycles/${row.id}/activate/`, {}); await loadAll(); } catch (error) { message.error(parseApiError(error, "Unable to activate cycle")); } }}>Activate</Button><Button size="small" onClick={async () => { try { await apiClient.post(`/api/hr/performance-cycles/${row.id}/close/`, {}); await loadAll(); } catch (error) { message.error(parseApiError(error, "Unable to close cycle")); } }}>Close</Button></Space> },
+              { title: "Actions", key: "actions", render: (_, row) => <Space wrap><Button size="small" onClick={async () => { try { await hrApi.workflow.activatePerformanceCycle(row.id); await loadAll(); } catch (error) { message.error(parseApiError(error, "Unable to activate cycle")); } }}>Activate</Button><Button size="small" onClick={async () => { try { await hrApi.workflow.closePerformanceCycle(row.id); await loadAll(); } catch (error) { message.error(parseApiError(error, "Unable to close cycle")); } }}>Close</Button></Space> },
             ]} pagination={{ pageSize: 5 }} /></div>
           <div>
             <div className="text-white font-medium mb-3">Goals</div>
@@ -337,14 +339,14 @@ export default function HRWorkflowCenter() {
               { title: "Staff", dataIndex: "staff", render: (value) => staffMap.get(value) ?? `#${value}` },
               { title: "Status", dataIndex: "status", render: (value) => <Tag color={value === "APPROVED" ? "success" : value === "SUBMITTED" ? "processing" : "default"}>{value}</Tag> },
               { title: "Rating", dataIndex: "overall_rating" },
-              { title: "Actions", key: "actions", render: (_, row) => <Space wrap><Button size="small" onClick={async () => { try { await apiClient.post(`/api/hr/performance-evaluations/${row.id}/submit/`, {}); await loadAll(); } catch (error) { message.error(parseApiError(error, "Unable to submit evaluation")); } }}>Submit</Button><Button size="small" onClick={async () => { try { await apiClient.post(`/api/hr/performance-evaluations/${row.id}/approve/`, {}); await loadAll(); } catch (error) { message.error(parseApiError(error, "Unable to approve evaluation")); } }}>Approve</Button></Space> },
+              { title: "Actions", key: "actions", render: (_, row) => <Space wrap><Button size="small" onClick={async () => { try { await hrApi.workflow.submitEvaluation(row.id); await loadAll(); } catch (error) { message.error(parseApiError(error, "Unable to submit evaluation")); } }}>Submit</Button><Button size="small" onClick={async () => { try { await hrApi.workflow.approveEvaluation(row.id); await loadAll(); } catch (error) { message.error(parseApiError(error, "Unable to approve evaluation")); } }}>Approve</Button></Space> },
             ]} pagination={{ pageSize: 5 }} /></div>
         </div>
       </Card>
 
       <Card className="!bg-[var(--cv-card)] !border-white/10 !rounded-3xl">
         <div className="text-white font-medium mb-3">Attendance Records</div>
-        <Table rowKey="id" loading={loading} dataSource={attendanceRows} columns={attendanceColumns} pagination={{ pageSize: 8 }} />
+        <Table rowKey="id" loading={pageLoading} dataSource={attendanceRows} columns={attendanceColumns} pagination={{ pageSize: 8 }} />
       </Card>
     </div>
   );

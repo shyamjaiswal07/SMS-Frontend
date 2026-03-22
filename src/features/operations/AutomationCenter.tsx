@@ -1,8 +1,7 @@
 import { PlayCircleOutlined, SettingOutlined, ThunderboltOutlined } from "@ant-design/icons";
 import { Button, Card, Col, Form, InputNumber, Row, Space, Statistic, Typography, message } from "antd";
 import { useEffect, useState } from "react";
-import { api } from "@/services/api";
-import apiClient from "@/services/apiClient";
+import { operationsApi } from "@/features/operations/operationsApi";
 import { currentTenant, parseApiError } from "@/utils/platform";
 
 type WorkerHealth = {
@@ -46,13 +45,10 @@ export default function AutomationCenter() {
     if (!tenant?.id) return;
     setLoading(true);
     try {
-      const [workerHealth, school] = await Promise.all([
-        apiClient.get("/health/worker/"),
-        api.institutions.schools.get(tenant.id),
-      ]);
+      const { healthData, schoolData } = await operationsApi.automation.load(tenant.id);
 
-      setHealth(workerHealth.data as WorkerHealth);
-      const settings = (school.settings_json as Record<string, number> | undefined) ?? {};
+      setHealth(healthData as WorkerHealth);
+      const settings = ((schoolData as { settings_json?: Record<string, number> }).settings_json) ?? {};
       form.setFieldsValue({
         payment_reminder_days_before: Number(settings.payment_reminder_days_before ?? defaultValues.payment_reminder_days_before),
         attendance_alert_threshold_pct: Number(settings.attendance_alert_threshold_pct ?? defaultValues.attendance_alert_threshold_pct),
@@ -120,7 +116,7 @@ export default function AutomationCenter() {
             onFinish={async (values) => {
               if (!tenant?.id) return;
               try {
-                await api.institutions.schools.update(tenant.id, { settings_json: values });
+                await operationsApi.automation.updateSettings(tenant.id, values);
                 message.success("Automation settings updated");
                 await loadAll();
               } catch (error) {
@@ -199,8 +195,8 @@ export default function AutomationCenter() {
                 onClick={async () => {
                   setRunningTask(item.taskType);
                   try {
-                    const response = await apiClient.post("/api/common/automation/run/", { task_type: item.taskType });
-                    message.success(`Queued ${item.taskType} (${response.data.task_id})`);
+                    const response = await operationsApi.automation.runTask(item.taskType);
+                    message.success(`Queued ${item.taskType} (${(response as { task_id?: string }).task_id})`);
                   } catch (error) {
                     message.error(parseApiError(error, `Unable to queue ${item.taskType}`));
                   } finally {

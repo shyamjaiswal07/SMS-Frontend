@@ -2,7 +2,8 @@ import { EyeOutlined, ReloadOutlined, SendOutlined } from "@ant-design/icons";
 import { Button, Card, Col, Form, Input, Modal, Row, Select, Space, Statistic, Switch, Table, Tag, Typography, message } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useEffect, useMemo, useState } from "react";
-import apiClient from "@/services/apiClient";
+import { useGetAdminUsersQuery } from "@/features/admin/adminApiSlice";
+import { communicationsApi } from "@/features/communications/communicationsApi";
 import { formatDateTime, parseApiError, rowsOf } from "@/utils/platform";
 
 type User = { id: number; email?: string; username?: string; first_name?: string; last_name?: string; role?: string };
@@ -87,27 +88,24 @@ export default function BulkCampaignCenter() {
   const [submitting, setSubmitting] = useState(false);
   const [actionKey, setActionKey] = useState<string | null>(null);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
-  const [users, setUsers] = useState<User[]>([]);
   const [selectedCampaignId, setSelectedCampaignId] = useState<number | null>(null);
   const [preview, setPreview] = useState<AudiencePreview | null>(null);
   const [stats, setStats] = useState<CampaignStats | null>(null);
   const [recipients, setRecipients] = useState<Recipient[]>([]);
   const [recipientModalOpen, setRecipientModalOpen] = useState(false);
   const [campaignDispatchTarget, setCampaignDispatchTarget] = useState<DispatchActionTarget | null>(null);
+  const {
+    data: usersData,
+    isFetching: usersLoading,
+    refetch: refetchUsers,
+  } = useGetAdminUsersQuery({ page: 1, page_size: 200 });
+  const users = rowsOf(usersData) as User[];
 
   const loadAll = async () => {
     setLoading(true);
     try {
-      const settled = await Promise.allSettled([
-        apiClient.get("/api/communications/bulk-campaigns/", { params: { page: 1, page_size: 200 } }),
-        apiClient.get("/api/accounts/users/", { params: { page: 1, page_size: 200 } }),
-      ]);
-      const valueAt = <T,>(index: number, fallback: T) =>
-        settled[index].status === "fulfilled" ? (settled[index] as PromiseFulfilledResult<{ data: T }>).value.data : fallback;
-
-      const nextCampaigns = rowsOf(valueAt(0, [] as Campaign[])) as Campaign[];
+      const nextCampaigns = rowsOf(await communicationsApi.loadBulkCampaigns()) as Campaign[];
       setCampaigns(nextCampaigns);
-      setUsers(rowsOf(valueAt(1, [] as User[])) as User[]);
       if (!selectedCampaignId && nextCampaigns.length) {
         setSelectedCampaignId(nextCampaigns[0].id);
       }
@@ -138,8 +136,11 @@ export default function BulkCampaignCenter() {
       const values = await dispatchForm.validateFields();
       const endpoint = target.action === "queue" ? "queue" : "retry-failed";
       setActionKey(`${target.action}-${target.id}`);
-      const response = await apiClient.post(`/api/communications/bulk-campaigns/${target.id}/${endpoint}/`, { dispatch_now: values.dispatch_now });
-      setStats(response.data as CampaignStats);
+      const response =
+        endpoint === "queue"
+          ? await communicationsApi.queueCampaign(target.id, values.dispatch_now)
+          : await communicationsApi.retryFailedCampaign(target.id, values.dispatch_now);
+      setStats(response as CampaignStats);
       setSelectedCampaignId(target.id);
       setCampaignDispatchTarget(null);
       dispatchForm.resetFields();
@@ -183,8 +184,8 @@ export default function BulkCampaignCenter() {
           <Button size="small" icon={<EyeOutlined />} loading={actionKey === `preview-${row.id}`} onClick={async () => {
             setActionKey(`preview-${row.id}`);
             try {
-              const response = await apiClient.get(`/api/communications/bulk-campaigns/${row.id}/audience-preview/`);
-              setPreview(response.data as AudiencePreview);
+              const response = await communicationsApi.previewCampaignAudience(row.id);
+              setPreview(response as AudiencePreview);
               setSelectedCampaignId(row.id);
             } catch (error) {
               message.error(parseApiError(error, "Unable to preview campaign audience"));
@@ -204,8 +205,8 @@ export default function BulkCampaignCenter() {
           <Button size="small" loading={actionKey === `refresh-${row.id}`} onClick={async () => {
             setActionKey(`refresh-${row.id}`);
             try {
-              const response = await apiClient.post(`/api/communications/bulk-campaigns/${row.id}/refresh-status/`, {});
-              setStats(response.data as CampaignStats);
+              const response = await communicationsApi.refreshCampaignStatus(row.id);
+              setStats(response as CampaignStats);
               setSelectedCampaignId(row.id);
               await loadAll();
             } catch (error) {
@@ -219,8 +220,8 @@ export default function BulkCampaignCenter() {
           <Button size="small" loading={actionKey === `stats-${row.id}`} onClick={async () => {
             setActionKey(`stats-${row.id}`);
             try {
-              const response = await apiClient.get(`/api/communications/bulk-campaigns/${row.id}/stats/`);
-              setStats(response.data as CampaignStats);
+              const response = await communicationsApi.getCampaignStats(row.id);
+              setStats(response as CampaignStats);
               setSelectedCampaignId(row.id);
             } catch (error) {
               message.error(parseApiError(error, "Unable to load campaign stats"));
@@ -233,8 +234,8 @@ export default function BulkCampaignCenter() {
           <Button size="small" loading={actionKey === `recipients-${row.id}`} onClick={async () => {
             setActionKey(`recipients-${row.id}`);
             try {
-              const response = await apiClient.get(`/api/communications/bulk-campaigns/${row.id}/recipients/`);
-              setRecipients(Array.isArray(response.data) ? (response.data as Recipient[]) : []);
+              const response = await communicationsApi.getCampaignRecipients(row.id);
+              setRecipients(Array.isArray(response) ? (response as Recipient[]) : []);
               setSelectedCampaignId(row.id);
               setRecipientModalOpen(true);
             } catch (error) {
@@ -256,8 +257,8 @@ export default function BulkCampaignCenter() {
             <Button size="small" danger loading={actionKey === `cancel-${row.id}`} onClick={async () => {
               setActionKey(`cancel-${row.id}`);
               try {
-                const response = await apiClient.post(`/api/communications/bulk-campaigns/${row.id}/cancel/`, {});
-                setStats(response.data as CampaignStats);
+                const response = await communicationsApi.cancelCampaign(row.id);
+                setStats(response as CampaignStats);
                 setSelectedCampaignId(row.id);
                 message.success("Campaign cancelled");
                 await loadAll();
@@ -286,7 +287,11 @@ export default function BulkCampaignCenter() {
             Sprint 11 broadcast campaigns with audience preview, queueing, retries, delivery stats, and recipient inspection.
           </Typography.Paragraph>
         </div>
-        <Button icon={<ReloadOutlined />} onClick={() => void loadAll()} loading={loading}>
+        <Button
+          icon={<ReloadOutlined />}
+          onClick={() => void Promise.all([loadAll(), refetchUsers()])}
+          loading={loading || usersLoading}
+        >
           Refresh
         </Button>
       </div>
@@ -338,7 +343,7 @@ export default function BulkCampaignCenter() {
                 try {
                   const values = await campaignForm.validateFields();
                   setSubmitting(true);
-                  await apiClient.post("/api/communications/bulk-campaigns/", {
+                  await communicationsApi.createCampaign({
                     name: values.name,
                     title: values.title,
                     body: values.body,

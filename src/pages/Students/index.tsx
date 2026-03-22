@@ -2,8 +2,13 @@ import { PlusOutlined, SettingOutlined } from "@ant-design/icons";
 import { Badge, Button, Card, Col, Form, Input, InputNumber, Modal, Row, Select, Space, Switch, Table, Tag, Typography, message } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useEffect, useMemo, useState } from "react";
-import { studentApi } from "@/features/students/studentApi";
 import type { Paginated, StudentIdPolicy, StudentRow, StudentStatus } from "@/features/students/studentTypes";
+import {
+  useGetStudentsQuery,
+  useCreateStudentMutation,
+  useGetCurrentPolicyQuery,
+  useUpdateCurrentPolicyMutation,
+} from "@/features/students/studentsApiSlice";
 import StudentDrawer from "@/features/students/components/StudentDrawer";
 
 type StudentCreateFormValues = {
@@ -57,71 +62,34 @@ export default function StudentsPage() {
   const role = useMemo(() => getTenantRole(), []);
   const canManage = role === "SUPER_ADMIN" || role === "SCHOOL_ADMIN";
 
-  const [rows, setRows] = useState<StudentRow[]>([]);
-  const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(1);
   const [pageSize] = useState(25);
-  const [total, setTotal] = useState(0);
-
   const [search, setSearch] = useState("");
   const [searchInput, setSearchInput] = useState("");
   const [statusFilter, setStatusFilter] = useState<"ALL" | StudentStatus>("ALL");
-
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [selected, setSelected] = useState<StudentRow | null>(null);
-
-  const [policy, setPolicy] = useState<StudentIdPolicy | null>(null);
-  const [policyLoading, setPolicyLoading] = useState(false);
   const [policyOpen, setPolicyOpen] = useState(false);
-  const [policySaving, setPolicySaving] = useState(false);
-
   const [createOpen, setCreateOpen] = useState(false);
-  const [createSaving, setCreateSaving] = useState(false);
 
   const [policyForm] = Form.useForm<StudentIdPolicy>();
   const [createForm] = Form.useForm<StudentCreateFormValues>();
 
-  const loadStudents = async () => {
-    setLoading(true);
-    try {
-      const data = await studentApi.listStudents({
-        search: search || undefined,
-        page,
-        page_size: pageSize,
-      });
-      const paginated = data as Paginated<StudentRow>;
-      const list = Array.isArray(data?.results) ? data.results : [];
-      setRows(list);
-      setTotal(typeof paginated?.count === "number" ? paginated.count : list.length);
-    } catch (error: any) {
-      message.error(error?.response?.data?.detail ?? "Failed to load students");
-    } finally {
-      setLoading(false);
-    }
-  };
+  const { data, isFetching: loading } = useGetStudentsQuery({
+    page,
+    page_size: pageSize,
+    search: search || undefined,
+  });
+  const rows = data?.results || [];
+  const total = data?.count || 0;
 
-  const loadPolicy = async () => {
-    if (!canManage) return;
-    setPolicyLoading(true);
-    try {
-      const currentPolicy = await studentApi.getCurrentStudentIdPolicy();
-      setPolicy(currentPolicy);
-    } catch (error: any) {
-      message.error(error?.response?.data?.detail ?? "Failed to load student ID policy");
-    } finally {
-      setPolicyLoading(false);
-    }
-  };
+  const { data: currentPolicy, isFetching: policyLoading } = useGetCurrentPolicyQuery(undefined, {
+    skip: !canManage,
+  });
+  const policy = currentPolicy || null;
 
-  useEffect(() => {
-    void loadStudents();
-  }, [page, pageSize, search]);
-
-  useEffect(() => {
-    if (canManage) {
-      void loadPolicy();
-    }
-  }, [canManage]);
+  const [updateCurrentPolicy, { isLoading: policySaving }] = useUpdateCurrentPolicyMutation();
+  const [createStudentMutation, { isLoading: createSaving }] = useCreateStudentMutation();
 
   useEffect(() => {
     setPage(1);
@@ -190,9 +158,8 @@ export default function StudentsPage() {
 
   const savePolicy = async () => {
     const values = await policyForm.validateFields();
-    setPolicySaving(true);
     try {
-      const updated = await studentApi.updateCurrentStudentIdPolicy({
+      await updateCurrentPolicy({
         prefix: values.prefix,
         separator: values.separator,
         include_year: values.include_year,
@@ -201,14 +168,11 @@ export default function StudentsPage() {
         sequence_start: values.sequence_start,
         allow_manual_override: values.allow_manual_override,
         is_active: values.is_active,
-      });
-      setPolicy(updated);
+      }).unwrap();
       setPolicyOpen(false);
       message.success("Student ID policy updated");
     } catch (error: any) {
-      message.error(error?.response?.data?.detail ?? "Failed to update student ID policy");
-    } finally {
-      setPolicySaving(false);
+      message.error(error?.data?.detail ?? "Failed to update student ID policy");
     }
   };
 
@@ -220,27 +184,26 @@ export default function StudentsPage() {
 
   const createStudent = async () => {
     const values = await createForm.validateFields();
-    setCreateSaving(true);
     try {
       const payload = Object.fromEntries(
-        Object.entries(values).filter(([, value]) => value !== undefined && value !== null && value !== ""),
+        Object.entries(values).filter(
+          ([, value]) => value !== undefined && value !== null && value !== "",
+        ),
       );
-      const created = await studentApi.createStudent(payload);
+      const created = await createStudentMutation(payload).unwrap();
       message.success(`Student ${created.student_id ?? created.id} created`);
       setCreateOpen(false);
       createForm.resetFields();
-      await loadStudents();
-      await loadPolicy();
     } catch (error: any) {
-      const detail = error?.response?.data;
+      const detail = error?.data;
       if (detail && typeof detail === "object") {
         const firstMessage = Object.values(detail).flat().find(Boolean);
-        message.error(typeof firstMessage === "string" ? firstMessage : "Failed to create student");
+        message.error(
+          typeof firstMessage === "string" ? firstMessage : "Failed to create student",
+        );
       } else {
-        message.error(error?.response?.data?.detail ?? "Failed to create student");
+        message.error(error?.data?.detail ?? "Failed to create student");
       }
-    } finally {
-      setCreateSaving(false);
     }
   };
 

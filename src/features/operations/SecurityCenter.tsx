@@ -1,9 +1,16 @@
 import { LockOutlined, SafetyCertificateOutlined, SearchOutlined } from "@ant-design/icons";
 import { Button, Card, Col, Form, Input, Modal, Row, Select, Space, Statistic, Table, Tag, Typography, message } from "antd";
 import type { ColumnsType } from "antd/es/table";
-import { useEffect, useMemo, useState } from "react";
-import { api } from "@/services/api";
+import { useMemo, useState } from "react";
 import { formatDateTime, parseApiError, rowsOf } from "@/utils/platform";
+import { useGetLoginAuditsQuery } from "@/features/admin/adminApiSlice";
+import {
+  useGetPasswordResetAuditsQuery,
+  useGetTwoFactorStatusQuery,
+  useEnrollTwoFactorMutation,
+  useDisableTwoFactorMutation,
+  useVerifyTwoFactorMutation,
+} from "@/features/auth/authApiSlice";
 
 type LoginAuditRow = {
   id: number;
@@ -45,10 +52,20 @@ type VerificationForm = {
 const resultTag = (success?: boolean) => <Tag color={success ? "success" : "error"}>{success ? "Success" : "Failed"}</Tag>;
 
 export default function SecurityCenter() {
-  const [loginAudits, setLoginAudits] = useState<LoginAuditRow[]>([]);
-  const [resetAudits, setResetAudits] = useState<PasswordResetAuditRow[]>([]);
-  const [twoFactor, setTwoFactor] = useState<TwoFactorStatus | null>(null);
-  const [loading, setLoading] = useState(false);
+  const { data: loginData, isFetching: loadingLogin, refetch: refetchLogin } = useGetLoginAuditsQuery({ page: 1, page_size: 200 });
+  const { data: resetData, isFetching: loadingResets, refetch: refetchResets } = useGetPasswordResetAuditsQuery({ page: 1, page_size: 200 });
+  const { data: twoFactorData, isFetching: loadingTwoFactor, refetch: refetchTwoFactor } = useGetTwoFactorStatusQuery();
+
+  const [enrollTwoFactor] = useEnrollTwoFactorMutation();
+  const [disableTwoFactor] = useDisableTwoFactorMutation();
+  const [verifyTwoFactor] = useVerifyTwoFactorMutation();
+
+  const loginAudits = (rowsOf(loginData) as LoginAuditRow[]) || [];
+  const resetAudits = (rowsOf(resetData) as PasswordResetAuditRow[]) || [];
+  const twoFactor = twoFactorData as TwoFactorStatus | null;
+
+  const loading = loadingLogin || loadingResets || loadingTwoFactor;
+
   const [verifyOpen, setVerifyOpen] = useState(false);
   const [verificationHint, setVerificationHint] = useState("");
   const [bootstrapSecret, setBootstrapSecret] = useState("");
@@ -61,34 +78,11 @@ export default function SecurityCenter() {
   });
   const [verificationForm] = Form.useForm<VerificationForm>();
 
-  const loadAll = async () => {
-    setLoading(true);
-    try {
-      const [loginData, resetData, twoFactorData] = await Promise.allSettled([
-        api.accounts.loginAudits.list({ page: 1, page_size: 200 }),
-        api.accounts.passwordResetAudits.list({ page: 1, page_size: 200 }),
-        api.accounts.twoFactor.status(),
-      ]);
-
-      if (loginData.status === "fulfilled") {
-        setLoginAudits(rowsOf(loginData.value) as LoginAuditRow[]);
-      }
-      if (resetData.status === "fulfilled") {
-        setResetAudits(rowsOf(resetData.value) as PasswordResetAuditRow[]);
-      }
-      if (twoFactorData.status === "fulfilled") {
-        setTwoFactor(twoFactorData.value as TwoFactorStatus);
-      }
-    } catch (error) {
-      message.error(parseApiError(error, "Failed to load security center"));
-    } finally {
-      setLoading(false);
-    }
+  const loadAll = () => {
+    refetchLogin();
+    refetchResets();
+    refetchTwoFactor();
   };
-
-  useEffect(() => {
-    void loadAll();
-  }, []);
 
   const filteredLoginAudits = useMemo(() => {
     const now = Date.now();
@@ -232,12 +226,11 @@ export default function SecurityCenter() {
                 onClick={async () => {
                   setSubmitting(true);
                   try {
-                    const result = await api.accounts.twoFactor.enroll({ method: "AUTH_APP" });
+                    const result = await enrollTwoFactor({ method: "AUTH_APP" }).unwrap();
                     setBootstrapSecret(String(result.bootstrap_secret ?? ""));
                     setVerificationHint(String(result.verification_hint ?? ""));
                     setVerifyOpen(true);
                     message.success("2FA enrollment initialized");
-                    await loadAll();
                   } catch (error) {
                     message.error(parseApiError(error, "Unable to start 2FA enrollment"));
                   } finally {
@@ -253,9 +246,8 @@ export default function SecurityCenter() {
                 onClick={async () => {
                   setSubmitting(true);
                   try {
-                    await api.accounts.twoFactor.disable();
+                    await disableTwoFactor().unwrap();
                     message.success("2FA disabled");
-                    await loadAll();
                   } catch (error) {
                     message.error(parseApiError(error, "Unable to disable 2FA"));
                   } finally {
@@ -283,11 +275,10 @@ export default function SecurityCenter() {
           void verificationForm.validateFields().then(async (values) => {
             setSubmitting(true);
             try {
-              await api.accounts.twoFactor.verify(values.verification_code);
+              await verifyTwoFactor(values.verification_code).unwrap();
               message.success("2FA verified");
               setVerifyOpen(false);
               verificationForm.resetFields();
-              await loadAll();
             } catch (error) {
               message.error(parseApiError(error, "Verification failed"));
             } finally {

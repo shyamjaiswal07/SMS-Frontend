@@ -1,8 +1,9 @@
 import { Badge, Button, Card, Input, Select, Space, Table, Tag, Tabs, Typography } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useEffect, useMemo, useState } from "react";
-import { academicsApi } from "@/features/academics/academicsApi";
-import type { CourseRow, Paginated } from "@/features/academics/academicsTypes";
+import { useGetCoursesQuery } from "@/features/academics/academicsApiSlice";
+import type { CourseRow } from "@/features/academics/academicsTypes";
+import { rowsOf } from "@/utils/platform";
 import CourseDrawer from "@/features/academics/components/CourseDrawer";
 import CourseEnrollmentsTab from "@/features/academics/components/CourseEnrollmentsTab";
 import AssessmentResultsTab from "@/features/academics/components/AssessmentResultsTab";
@@ -10,11 +11,8 @@ import AttendanceTab from "@/features/academics/components/AttendanceTab";
 import { BookOutlined } from "@ant-design/icons";
 
 export default function AcademicsCoursesPage() {
-  const [loading, setLoading] = useState(false);
-  const [courses, setCourses] = useState<CourseRow[]>([]);
   const [page, setPage] = useState(1);
   const [pageSize] = useState(25);
-  const [total, setTotal] = useState(0);
 
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
@@ -23,38 +21,21 @@ export default function AcademicsCoursesPage() {
   const [selectedCourse, setSelectedCourse] = useState<CourseRow | null>(null);
   const [tabKey, setTabKey] = useState<"courses" | "enrollments" | "assessments" | "attendance">("courses");
 
+
+  const { data: coursesData, isFetching: loading } = useGetCoursesQuery({
+    search: search || undefined,
+    page,
+    page_size: pageSize,
+  });
+
+  const courses = rowsOf(coursesData) as CourseRow[];
+  const total = typeof coursesData?.count === "number" ? coursesData.count : courses.length;
+
   const coursesById = useMemo(() => {
     const map: Record<number, CourseRow> = {};
     for (const c of courses) map[c.id] = c;
     return map;
   }, [courses]);
-
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      setLoading(true);
-      try {
-        const data = await academicsApi.courses.list({
-          search: search || undefined,
-          page,
-          page_size: pageSize,
-        });
-        if (!mounted) return;
-
-        const paginated = data as Paginated<CourseRow>;
-        const list = Array.isArray((data as any)?.results) ? (data as any).results : Array.isArray(data) ? (data as any) : [];
-
-        setCourses(list as CourseRow[]);
-        setTotal(typeof paginated?.count === "number" ? paginated.count : list.length);
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    })();
-
-    return () => {
-      mounted = false;
-    };
-  }, [page, pageSize, search]);
 
   useEffect(() => {
     setPage(1);

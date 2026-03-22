@@ -2,7 +2,7 @@ import { DownloadOutlined, ReloadOutlined } from "@ant-design/icons";
 import { Button, Card, Input, Space, Table, Tabs, Typography, message } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useEffect, useMemo, useState } from "react";
-import apiClient from "@/services/apiClient";
+import { erpApi } from "@/features/erp/erpApi";
 import { currentTenant, downloadFromApi, parseApiError } from "@/utils/platform";
 
 type ModuleKey = "library" | "transport";
@@ -57,12 +57,9 @@ export default function ModuleReportsPanel({ moduleKey }: { moduleKey: ModuleKey
   const loadLibrary = async () => {
     setLoading(true);
     try {
-      const [analyticsResponse, overdueResponse] = await Promise.all([
-        apiClient.get("/api/library/book-issues/analytics/"),
-        apiClient.get("/api/library/book-issues/overdue-report/", { params: libraryDueBefore ? { due_before: libraryDueBefore } : undefined }),
-      ]);
-      setLibraryAnalytics(analyticsResponse.data as LibraryAnalytics);
-      setOverdueReport(overdueResponse.data as OverdueReport);
+      const { analyticsData, overdueData } = await erpApi.reports.loadLibrary(libraryDueBefore);
+      setLibraryAnalytics(analyticsData as LibraryAnalytics);
+      setOverdueReport(overdueData as OverdueReport);
     } catch (error) {
       message.error(parseApiError(error, "Unable to load library reports"));
     } finally {
@@ -74,14 +71,10 @@ export default function ModuleReportsPanel({ moduleKey }: { moduleKey: ModuleKey
     setLoading(true);
     try {
       const params = transportStartDate || transportEndDate ? { start_date: transportStartDate || undefined, end_date: transportEndDate || undefined } : undefined;
-      const [occupancyResponse, utilizationResponse, costTrendResponse] = await Promise.all([
-        apiClient.get("/api/transport/routes/occupancy-report/"),
-        apiClient.get("/api/transport/student-transport-allocations/utilization-report/", { params }),
-        apiClient.get("/api/transport/vehicle-maintenance/cost-trend/", { params }),
-      ]);
-      setOccupancyReport(occupancyResponse.data as OccupancyReport);
-      setUtilizationReport(utilizationResponse.data as UtilizationReport);
-      setCostTrendReport(costTrendResponse.data as CostTrendReport);
+      const { occupancyData, utilizationData, costTrendData } = await erpApi.reports.loadTransport(params);
+      setOccupancyReport(occupancyData as OccupancyReport);
+      setUtilizationReport(utilizationData as UtilizationReport);
+      setCostTrendReport(costTrendData as CostTrendReport);
     } catch (error) {
       message.error(parseApiError(error, "Unable to load transport reports"));
     } finally {
@@ -122,7 +115,7 @@ export default function ModuleReportsPanel({ moduleKey }: { moduleKey: ModuleKey
               className="!rounded-2xl !bg-[var(--cv-accent)] !border-0"
               onClick={async () => {
                 try {
-                  await apiClient.post("/api/common/automation/run/", { task_type: "LIBRARY_LATE_FEES" });
+                  await erpApi.reports.runLibraryLateFees();
                   message.success("Library late-fee automation queued");
                   await loadLibrary();
                 } catch (error) {

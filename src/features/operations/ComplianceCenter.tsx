@@ -2,7 +2,7 @@ import { DownloadOutlined, ReloadOutlined, SearchOutlined } from "@ant-design/ic
 import { Button, Card, Col, Form, Input, Row, Select, Space, Table, Tag, Typography, message } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useEffect, useState } from "react";
-import apiClient from "@/services/apiClient";
+import { operationsApi } from "@/features/operations/operationsApi";
 import { downloadFromApi, formatDateTime, parseApiError, rowsOf } from "@/utils/platform";
 
 type AuditRow = {
@@ -36,10 +36,8 @@ export default function ComplianceCenter() {
   const load = async (params?: Record<string, unknown>) => {
     setLoading(true);
     try {
-      const response = await apiClient.get("/api/common/compliance-audit-logs/", {
-        params: { page: 1, page_size: 100, ...params },
-      });
-      setRows(rowsOf(response.data) as AuditRow[]);
+      const data = await operationsApi.compliance.listLogs(params);
+      setRows(rowsOf(data) as AuditRow[]);
     } catch (error) {
       message.error(parseApiError(error, "Failed to load compliance logs"));
     } finally {

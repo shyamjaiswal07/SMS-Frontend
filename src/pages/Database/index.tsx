@@ -13,11 +13,19 @@ import {
 import type { ColumnsType } from "antd/es/table";
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { api } from "@/services/api";
 import type {
   AdmissionWorkflowState,
   StudentStatus,
 } from "@/features/students/studentTypes";
+import {
+  useGetAdmissionsQuery,
+  useGetWorkflowHistoryQuery,
+  useSubmitAdmissionMutation,
+  useStartReviewMutation,
+  useApproveAdmissionMutation,
+  useRejectAdmissionMutation,
+  useConvertAdmissionMutation,
+} from "@/features/students/admissionsApiSlice";
 import { AdmissionDrawer } from "./AdmissionDrawer";
 import {
   RejectApplicationModal,
@@ -37,21 +45,6 @@ import {
   workflowTagColor,
 } from "./utils";
 
-type AdmissionConvertResponse = {
-  admission_id: number;
-  student_id: string;
-  student_pk: number;
-  workflow_state: AdmissionWorkflowState;
-  enrollment_created: boolean;
-};
-
-type Paginated<T> = {
-  count?: number;
-  next?: string | null;
-  previous?: string | null;
-  results?: T[];
-};
-
 export default function Admissions() {
   const role = useMemo(() => getTenantRole(), []);
   const canWrite = role === "SUPER_ADMIN" || role === "SCHOOL_ADMIN";
@@ -59,79 +52,40 @@ export default function Admissions() {
   const [searchParams, setSearchParams] = useSearchParams();
   const urlApplicationId = searchParams.get("applicationId");
 
-  const [loading, setLoading] = useState(false);
-  const [rows, setRows] = useState<AdmissionApplicationRow[]>([]);
   const [page, setPage] = useState(1);
   const [pageSize] = useState(25);
-  const [total, setTotal] = useState(0);
-
   const [searchInput, setSearchInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"ALL" | StudentStatus>(
-    "ALL",
-  );
-  const [workflowFilter, setWorkflowFilter] = useState<
-    "ALL" | AdmissionWorkflowState
-  >("ALL");
+  const [statusFilter, setStatusFilter] = useState<"ALL" | StudentStatus>("ALL");
+  const [workflowFilter, setWorkflowFilter] = useState<"ALL" | AdmissionWorkflowState>("ALL");
+
+  const { data, isFetching: loading } = useGetAdmissionsQuery({
+    page,
+    page_size: pageSize,
+    search: searchQuery || undefined,
+  });
+  const rows = data?.results || [];
+  const total = data?.count || 0;
 
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [drawerLoading, setDrawerLoading] = useState(false);
-  const [actionLoading, setActionLoading] = useState(false);
-  const [selected, setSelected] = useState<AdmissionApplicationRow | null>(
-    null,
+  const [selected, setSelected] = useState<AdmissionApplicationRow | null>(null);
+
+  const { data: workflowHistoryData, isFetching: drawerLoading } = useGetWorkflowHistoryQuery(
+    selected?.id ?? 0,
+    { skip: !selected || !drawerOpen }
   );
-  const [workflowHistory, setWorkflowHistory] = useState<
-    AdmissionWorkflowTransitionRow[]
-  >([]);
+  const workflowHistory = workflowHistoryData || [];
 
   const [rejectOpen, setRejectOpen] = useState(false);
   const [convertOpen, setConvertOpen] = useState(false);
 
-  const load = async () => {
-    setLoading(true);
-    try {
-      const data = await api.students.admissions.list({
-        search: searchQuery || undefined,
-        page,
-        page_size: pageSize,
-      });
+  const [submitAdmission, { isLoading: isSubmitting }] = useSubmitAdmissionMutation();
+  const [startReview, { isLoading: isStartingReview }] = useStartReviewMutation();
+  const [approveAdmission, { isLoading: isApproving }] = useApproveAdmissionMutation();
+  const [rejectAdmissionMutation, { isLoading: isRejecting }] = useRejectAdmissionMutation();
+  const [convertAdmissionMutation, { isLoading: isConverting }] = useConvertAdmissionMutation();
 
-      const paginated = data as Paginated<AdmissionApplicationRow>;
-      const list = Array.isArray(paginated.results) ? paginated.results : [];
-      setRows(list);
-      setTotal(
-        typeof paginated?.count === "number" ? paginated.count : list.length,
-      );
-      return list;
-    } catch (error: any) {
-      message.error(
-        error?.response?.data?.detail ?? "Failed to load applications",
-      );
-      return [] as AdmissionApplicationRow[];
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const loadWorkflowHistory = async (applicationId: number) => {
-    setDrawerLoading(true);
-    try {
-      const history =
-        await api.students.admissions.workflowHistory(applicationId);
-      setWorkflowHistory(Array.isArray(history) ? history : []);
-    } catch (error: any) {
-      message.error(
-        error?.response?.data?.detail ?? "Failed to load workflow history",
-      );
-      setWorkflowHistory([]);
-    } finally {
-      setDrawerLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    void load();
-  }, [page, searchQuery]);
+  const actionLoading = isSubmitting || isStartingReview || isApproving || isRejecting || isConverting;
 
   useEffect(() => {
     setPage(1);
@@ -139,15 +93,16 @@ export default function Admissions() {
 
   // Deep Linking Syncing
   useEffect(() => {
-    if (urlApplicationId && rows.length > 0 && !selected) {
+    if (urlApplicationId && rows.length > 0) {
       const row = rows.find((r) => r.id.toString() === urlApplicationId);
       if (row) {
         setSelected(row);
         setDrawerOpen(true);
-        void loadWorkflowHistory(row.id);
       }
+    } else if (!urlApplicationId) {
+      setDrawerOpen(false);
     }
-  }, [urlApplicationId, rows, selected]);
+  }, [urlApplicationId, rows]);
 
   const filteredRows = useMemo(() => {
     return rows.filter((row) => {
@@ -159,14 +114,11 @@ export default function Admissions() {
     });
   }, [rows, statusFilter, workflowFilter]);
 
-  const openDrawer = async (row: AdmissionApplicationRow) => {
+  const openDrawer = (row: AdmissionApplicationRow) => {
     setSearchParams((prev) => {
       prev.set("applicationId", row.id.toString());
       return prev;
     });
-    setSelected(row);
-    setDrawerOpen(true);
-    await loadWorkflowHistory(row.id);
   };
 
   const closeDrawer = () => {
@@ -174,78 +126,38 @@ export default function Admissions() {
       prev.delete("applicationId");
       return prev;
     });
-    setDrawerOpen(false);
     setTimeout(() => setSelected(null), 300); // clear after animation
   };
 
-  const refreshSelectedState = async (
-    admissionId: number,
-    fallback?: Partial<AdmissionApplicationRow>,
-  ) => {
-    const latestRows = await load();
-    const latestSelected = latestRows.find((row) => row.id === admissionId);
-    if (latestSelected) {
-      setSelected(latestSelected);
-    } else if (fallback) {
-      setSelected((current) =>
-        current && current.id === admissionId
-          ? { ...current, ...fallback }
-          : current,
-      );
-    }
-    await loadWorkflowHistory(admissionId);
-  };
-
-  const runWorkflowAction = async (
-    request: () => Promise<AdmissionApplicationRow | AdmissionConvertResponse>,
+  const handleMutation = async (
+    mutationFn: () => Promise<unknown>,
     successMessage: string,
-    fallback?: Partial<AdmissionApplicationRow>,
   ) => {
     if (!selected) return;
-    setActionLoading(true);
     try {
-      const response = await request();
-      const admissionId =
-        "id" in response ? response.id : response.admission_id;
-      if ("id" in response) {
-        setSelected(response);
-      } else {
-        setSelected((current) =>
-          current && current.id === admissionId
-            ? {
-                ...current,
-                workflow_state: response.workflow_state,
-                converted_student: response.student_pk,
-                status: "ACTIVE",
-              }
-            : current,
-        );
-      }
+      await mutationFn();
       message.success(successMessage);
-      await refreshSelectedState(admissionId, fallback);
     } catch (error: any) {
-      message.error(error?.response?.data?.detail ?? "Workflow action failed");
-    } finally {
-      setActionLoading(false);
+      message.error(error?.data?.detail ?? "Workflow action failed");
     }
   };
 
   const actionButtons = useMemo(() => {
     if (!selected) return null;
 
-    const startReview = () =>
-      runWorkflowAction(
-        () => api.students.admissions.startReview(selected.id),
+    const handleStartReview = () =>
+      handleMutation(
+        () => startReview({ id: selected.id }).unwrap(),
         "Application moved to review",
       );
-    const approveAdmission = () =>
-      runWorkflowAction(
-        () => api.students.admissions.approve(selected.id),
+    const handleApprove = () =>
+      handleMutation(
+        () => approveAdmission({ id: selected.id }).unwrap(),
         "Application approved",
       );
-    const submitAdmission = () =>
-      runWorkflowAction(
-        () => api.students.admissions.submit(selected.id),
+    const handleSubmitAdmission = () =>
+      handleMutation(
+        () => submitAdmission(selected.id).unwrap(),
         "Application submitted",
       );
 
@@ -256,7 +168,7 @@ export default function Admissions() {
             type="primary"
             className="!rounded-2xl !bg-[var(--cv-accent)] !border-0"
             loading={actionLoading}
-            onClick={() => void submitAdmission()}
+            onClick={() => void handleSubmitAdmission()}
           >
             Submit
           </Button>
@@ -267,7 +179,7 @@ export default function Admissions() {
             <Button
               className="!rounded-2xl"
               loading={actionLoading}
-              onClick={() => void startReview()}
+              onClick={() => void handleStartReview()}
             >
               Start Review
             </Button>
@@ -275,7 +187,7 @@ export default function Admissions() {
               type="primary"
               className="!rounded-2xl !bg-[var(--cv-accent)] !border-0"
               loading={actionLoading}
-              onClick={() => void approveAdmission()}
+              onClick={() => void handleApprove()}
             >
               Approve
             </Button>
@@ -296,7 +208,7 @@ export default function Admissions() {
               type="primary"
               className="!rounded-2xl !bg-[var(--cv-accent)] !border-0"
               loading={actionLoading}
-              onClick={() => void approveAdmission()}
+              onClick={() => void handleApprove()}
             >
               Approve
             </Button>
@@ -316,7 +228,7 @@ export default function Admissions() {
           <Button
             className="!rounded-2xl"
             loading={actionLoading}
-            onClick={() => void startReview()}
+            onClick={() => void handleStartReview()}
           >
             Re-open Review
           </Button>
@@ -339,8 +251,8 @@ export default function Admissions() {
 
   const rejectAdmission = async (values: RejectFormValues) => {
     if (!selected) return;
-    await runWorkflowAction(
-      () => api.students.admissions.reject(selected.id, values),
+    await handleMutation(
+      () => rejectAdmissionMutation({ id: selected.id, reason: values.reason }).unwrap(),
       "Application rejected",
     );
     setRejectOpen(false);
@@ -348,14 +260,14 @@ export default function Admissions() {
 
   const convertAdmission = async (values: ConvertFormValues) => {
     if (!selected) return;
-    await runWorkflowAction(
+    await handleMutation(
       () =>
-        api.students.admissions.convert(selected.id, {
+        convertAdmissionMutation({
+          id: selected.id,
           ...values,
           metadata_json: { source: "frontend-admissions" },
-        }),
+        }).unwrap(),
       "Application converted to student",
-      { workflow_state: "CONVERTED" },
     );
     setConvertOpen(false);
   };
@@ -415,14 +327,7 @@ export default function Admissions() {
             rejection, conversion, and timeline tracking.
           </Typography.Paragraph>
         </div>
-        <Button
-          className="!rounded-2xl"
-          onClick={() => void load()}
-          loading={loading}
-        >
-          Refresh
-        </Button>
-      </div>
+        </div>
 
       <Card className="!bg-[var(--cv-card)] !border-white/10 !rounded-3xl">
         <div className="mb-4 flex gap-3 items-center flex-wrap">

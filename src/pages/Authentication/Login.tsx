@@ -1,7 +1,7 @@
 import { ArrowRightOutlined, BulbOutlined, LockOutlined, SafetyOutlined, ThunderboltOutlined } from "@ant-design/icons";
 import { Button, Card, Checkbox, Divider, Form, Input, Typography, message } from "antd";
 import { useNavigate } from "react-router-dom";
-import { api } from "@/services/api";
+import { authApi } from "@/features/auth/authApi";
 import { parseApiError } from "@/utils/platform";
 
 type LoginValues = {
@@ -114,7 +114,7 @@ export default function Login() {
               initialValues={{ schoolCode: "", remember: true, twoFactorCode: "" }}
               onFinish={async (values) => {
                 try {
-                  const data = await api.login(values.email, values.password, values.schoolCode, values.twoFactorCode);
+                  const data = await authApi.login(values.email, values.password, values.schoolCode, values.twoFactorCode);
 
                   if (data?.access) sessionStorage.setItem("accessToken", data.access);
                   if (data?.refresh) sessionStorage.setItem("refreshToken", data.refresh);

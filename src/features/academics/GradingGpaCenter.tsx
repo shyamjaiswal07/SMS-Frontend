@@ -2,7 +2,10 @@ import { ReloadOutlined } from "@ant-design/icons";
 import { Button, Card, Col, Form, Input, InputNumber, Row, Select, Space, Table, Tag, Typography, message } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useEffect, useMemo, useState } from "react";
-import apiClient from "@/services/apiClient";
+import { useGetCoursesQuery } from "@/features/academics/academicsApiSlice";
+import { academicOperationsApi } from "@/features/academics/academicOperationsApi";
+import { useGetAcademicYearsQuery, useGetTermsQuery } from "@/features/institutions/institutionsApiSlice";
+import { useGetStudentsQuery } from "@/features/students/studentsApiSlice";
 import { formatDateTime, parseApiError, rowsOf } from "@/utils/platform";
 
 type Student = { id: number; student_id?: string; first_name?: string; last_name?: string };
@@ -26,6 +29,10 @@ export default function GradingGpaCenter() {
   const [policyForm] = Form.useForm<PolicyForm>();
   const [weightForm] = Form.useForm<WeightForm>();
   const [recalcForm] = Form.useForm<RecalcForm>();
+  const { data: studentsData, isFetching: studentsLoading, refetch: refetchStudents } = useGetStudentsQuery({ page: 1, page_size: 200 });
+  const { data: yearsData, isFetching: yearsLoading, refetch: refetchYears } = useGetAcademicYearsQuery({ page: 1, page_size: 100 });
+  const { data: termsData, isFetching: termsLoading, refetch: refetchTerms } = useGetTermsQuery({ page: 1, page_size: 100 });
+  const { data: coursesData, isFetching: coursesLoading, refetch: refetchCourses } = useGetCoursesQuery({ page: 1, page_size: 200 });
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [students, setStudents] = useState<Student[]>([]);
@@ -40,28 +47,17 @@ export default function GradingGpaCenter() {
   const loadAll = async () => {
     setLoading(true);
     try {
-      const settled = await Promise.allSettled([
-        apiClient.get("/api/students/students/", { params: { page: 1, page_size: 200 } }),
-        apiClient.get("/api/institutions/academic-years/", { params: { page: 1, page_size: 100 } }),
-        apiClient.get("/api/institutions/terms/", { params: { page: 1, page_size: 100 } }),
-        apiClient.get("/api/academics/courses/", { params: { page: 1, page_size: 200 } }),
-        apiClient.get("/api/academics/assessment-types/", { params: { page: 1, page_size: 100 } }),
-        apiClient.get("/api/academics/grading-schemes/", { params: { page: 1, page_size: 100 } }),
-        apiClient.get("/api/academics/course-grading-policies/", { params: { page: 1, page_size: 100 } }),
-        apiClient.get("/api/academics/gpa-records/", { params: { page: 1, page_size: 200 } }),
-      ]);
+      const {
+        assessmentTypeData,
+        schemeData,
+        policyData,
+        gpaRecordData,
+      } = await academicOperationsApi.grading.load();
 
-      const valueAt = <T,>(index: number, fallback: T) =>
-        settled[index].status === "fulfilled" ? (settled[index] as PromiseFulfilledResult<{ data: T }>).value.data : fallback;
-
-      setStudents(rowsOf(valueAt(0, [] as Student[])) as Student[]);
-      setYears(rowsOf(valueAt(1, [] as AcademicYear[])) as AcademicYear[]);
-      setTerms(rowsOf(valueAt(2, [] as Term[])) as Term[]);
-      setCourses(rowsOf(valueAt(3, [] as Course[])) as Course[]);
-      setAssessmentTypes(rowsOf(valueAt(4, [] as AssessmentType[])) as AssessmentType[]);
-      setSchemes(rowsOf(valueAt(5, [] as Scheme[])) as Scheme[]);
-      setPolicies(rowsOf(valueAt(6, [] as Policy[])) as Policy[]);
-      setGpaRecords(rowsOf(valueAt(7, [] as GPARecord[])) as GPARecord[]);
+      setAssessmentTypes(rowsOf(assessmentTypeData) as AssessmentType[]);
+      setSchemes(rowsOf(schemeData) as Scheme[]);
+      setPolicies(rowsOf(policyData) as Policy[]);
+      setGpaRecords(rowsOf(gpaRecordData) as GPARecord[]);
     } catch (error) {
       message.error(parseApiError(error, "Failed to load grading workspace"));
     } finally {
@@ -72,6 +68,28 @@ export default function GradingGpaCenter() {
   useEffect(() => {
     void loadAll();
   }, []);
+
+  useEffect(() => {
+    setStudents(rowsOf(studentsData) as Student[]);
+  }, [studentsData]);
+
+  useEffect(() => {
+    setYears(rowsOf(yearsData) as AcademicYear[]);
+  }, [yearsData]);
+
+  useEffect(() => {
+    setTerms(rowsOf(termsData) as Term[]);
+  }, [termsData]);
+
+  useEffect(() => {
+    setCourses(rowsOf(coursesData) as Course[]);
+  }, [coursesData]);
+
+  const pageLoading = loading || studentsLoading || yearsLoading || termsLoading || coursesLoading;
+
+  const refreshAll = async () => {
+    await Promise.all([loadAll(), refetchStudents(), refetchYears(), refetchTerms(), refetchCourses()]);
+  };
 
   const studentMap = useMemo(() => new Map(students.map((item) => [item.id, `${item.student_id ?? item.id} - ${item.first_name ?? ""} ${item.last_name ?? ""}`.trim()])), [students]);
   const courseMap = useMemo(() => new Map(courses.map((item) => [item.id, `${item.code ?? item.id} - ${item.title ?? ""}`.trim()])), [courses]);
@@ -99,7 +117,7 @@ export default function GradingGpaCenter() {
             Configure grading policies and recalculate GPA records from the Sprint 4 backend APIs.
           </Typography.Paragraph>
         </div>
-        <Button icon={<ReloadOutlined />} onClick={() => void loadAll()} loading={loading}>
+        <Button icon={<ReloadOutlined />} onClick={() => void refreshAll()} loading={pageLoading}>
           Refresh
         </Button>
       </div>
@@ -128,7 +146,7 @@ export default function GradingGpaCenter() {
                 try {
                   const values = await schemeForm.validateFields();
                   setSubmitting(true);
-                  await apiClient.post("/api/academics/grading-schemes/", values);
+                  await academicOperationsApi.grading.createGradingScheme(values);
                   message.success("Grading scheme created");
                   schemeForm.resetFields();
                   await loadAll();
@@ -165,7 +183,7 @@ export default function GradingGpaCenter() {
                 try {
                   const values = await bandForm.validateFields();
                   setSubmitting(true);
-                  await apiClient.post("/api/academics/grade-bands/", values);
+                  await academicOperationsApi.grading.createGradeBand(values);
                   message.success("Grade band created");
                   bandForm.resetFields();
                   await loadAll();
@@ -204,7 +222,7 @@ export default function GradingGpaCenter() {
                 try {
                   const values = await policyForm.validateFields();
                   setSubmitting(true);
-                  await apiClient.post("/api/academics/course-grading-policies/", values);
+                  await academicOperationsApi.grading.createCoursePolicy(values);
                   message.success("Policy created");
                   policyForm.resetFields();
                   await loadAll();
@@ -234,7 +252,7 @@ export default function GradingGpaCenter() {
                 try {
                   const values = await weightForm.validateFields();
                   setSubmitting(true);
-                  await apiClient.post("/api/academics/assessment-weight-rules/", values);
+                  await academicOperationsApi.grading.createWeightRule(values);
                   message.success("Weight rule created");
                   weightForm.resetFields();
                   await loadAll();
@@ -271,7 +289,7 @@ export default function GradingGpaCenter() {
                     try {
                       const values = await recalcForm.validateFields();
                       setSubmitting(true);
-                      await apiClient.post("/api/academics/gpa/recalculate/", values);
+                      await academicOperationsApi.grading.recalculateGpa(values);
                       message.success("GPA recalculated");
                       await loadAll();
                     } catch (error) {
@@ -287,7 +305,7 @@ export default function GradingGpaCenter() {
             </Form>
           </Space>
         </div>
-        <Table rowKey="id" loading={loading} dataSource={gpaRecords} columns={gpaColumns} pagination={{ pageSize: 8 }} />
+        <Table rowKey="id" loading={pageLoading} dataSource={gpaRecords} columns={gpaColumns} pagination={{ pageSize: 8 }} />
       </Card>
     </div>
   );
